@@ -1,0 +1,87 @@
+# Prometheus configuration for Mobile Multi-Modal LLM monitoring
+# Comprehensive metrics collection for model performance and system health
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'mobile-multimodal-llm'
+    environment: 'production'
+
+# Rule files for alerting
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 5s
+    metrics_path: /metrics
+
+  # Application metrics
+  - job_name: 'mobile-multimodal-app'
+    static_configs:
+      - targets: ['app-prod:8080']
+    scrape_interval: 10s
+    metrics_path: /metrics
+    scrape_timeout: 5s
+    params:
+      format: ['prometheus']
+
+  # Model inference metrics
+  - job_name: 'model-inference'
+    static_configs:
+      - targets: ['app-prod:8080']
+    scrape_interval: 5s
+    metrics_path: /model/metrics
+    params:
+      module: ['inference']
+
+  # System metrics (node-exporter)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # Container metrics (cAdvisor)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Database metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Redis metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Remote write for long-term storage (optional)
+# remote_write:
+#   - url: "https://prometheus-remote-write-endpoint/api/v1/write"
+#     basic_auth:
+#       username: "your-username"
+#       password: "your-password"
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: 30d
+    retention.size: 10GB
+    no-lockfile: true

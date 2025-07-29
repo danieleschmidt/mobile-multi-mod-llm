@@ -1,0 +1,90 @@
+# Dependabot configuration for automated dependency updates
+# Keeps dependencies current with security patches and improvements
+
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "terragon-labs/security-team"
+    assignees:
+      - "terragon-labs/maintainers"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "security"
+    # Group related updates
+    groups:
+      pytorch-ecosystem:
+        patterns:
+          - "torch*"
+          - "torchvision"
+          - "torchaudio"
+      testing-framework:
+        patterns:
+          - "pytest*"
+          - "*test*"
+      linting-tools:
+        patterns:
+          - "black"
+          - "isort"
+          - "flake8"
+          - "mypy"
+      mobile-sdks:
+        patterns:
+          - "tensorflow*"
+          - "coremltools"
+          - "onnx*"
+    # Security updates (high priority)
+    allow:
+      - dependency-type: "direct"
+        update-type: "security"
+      - dependency-type: "indirect"
+        update-type: "security"
+    # Version updates
+    ignore:
+      # Ignore major version updates for stable dependencies
+      - dependency-name: "torch"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tensorflow" 
+        update-types: ["version-update:semver-major"]
+
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "terragon-labs/devops-team"
+    labels:
+      - "docker"
+      - "infrastructure"
+    
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/.github/workflows"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "terragon-labs/devops-team"
+    labels:
+      - "github-actions"
+      - "ci-cd"

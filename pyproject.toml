@@ -112,3 +112,23 @@ omit = ["*/tests/*", "*/test_*"]
 [tool.bandit]
 exclude_dirs = ["tests"]
 skips = ["B101", "B601"]
+
+# SBOM Generation Configuration
+[tool.cyclonedx-bom]
+output_format = "json"
+output_file = "sbom.json"
+include_dev = false
+include_optional = true
+schema_version = "1.4"
+
+# Security scanning configuration
+[tool.safety]
+ignore = []
+output = "json"
+json = true
+
+# Dependency vulnerability scanning
+[tool.pip-audit]
+output = "json"
+format = "json"
+desc = true

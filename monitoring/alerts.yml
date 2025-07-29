@@ -1,0 +1,190 @@
+# Prometheus alerting rules for Mobile Multi-Modal LLM
+# Critical alerts for model performance and system health
+
+groups:
+  - name: mobile-multimodal-llm.rules
+    rules:
+      # High-level service alerts
+      - alert: ModelServiceDown
+        expr: up{job="mobile-multimodal-app"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: mobile-multimodal
+        annotations:
+          summary: "Mobile Multi-Modal LLM service is down"
+          description: "The mobile multimodal service has been down for more than 30 seconds."
+          runbook_url: "https://docs.example.com/runbooks/service-down"
+      
+      - alert: HighErrorRate
+        expr: rate(model_inference_errors_total[5m]) / rate(model_inference_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: mobile-multimodal
+        annotations:
+          summary: "High error rate in model inference"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+          runbook_url: "https://docs.example.com/runbooks/high-error-rate"
+      
+      - alert: CriticalErrorRate  
+        expr: rate(model_inference_errors_total[5m]) / rate(model_inference_requests_total[5m]) > 0.20
+        for: 1m
+        labels:
+          severity: critical
+          service: mobile-multimodal
+        annotations:
+          summary: "Critical error rate in model inference"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+          runbook_url: "https://docs.example.com/runbooks/critical-error-rate"
+
+      # Performance alerts
+      - alert: HighInferenceLatency
+        expr: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          service: mobile-multimodal
+        annotations:
+          summary: "High inference latency detected"
+          description: "95th percentile latency is {{ $value }}s over the last 5 minutes."
+          runbook_url: "https://docs.example.com/runbooks/high-latency"
+      
+      - alert: CriticalInferenceLatency
+        expr: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket[5m])) > 2.0
+        for: 1m
+        labels:
+          severity: critical
+          service: mobile-multimodal
+        annotations:
+          summary: "Critical inference latency detected"
+          description: "95th percentile latency is {{ $value }}s over the last 5 minutes."
+          runbook_url: "https://docs.example.com/runbooks/critical-latency"
+
+      # Resource alerts
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 > 1024
+        for: 5m
+        labels:
+          severity: warning
+          service: mobile-multimodal
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value }}MB, exceeding 1GB threshold."
+          runbook_url: "https://docs.example.com/runbooks/high-memory"
+      
+      - alert: CriticalMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 > 2048
+        for: 2m
+        labels:
+          severity: critical
+          service: mobile-multimodal
+        annotations:
+          summary: "Critical memory usage detected"
+          description: "Memory usage is {{ $value }}MB, exceeding 2GB critical threshold."
+          runbook_url: "https://docs.example.com/runbooks/critical-memory"
+
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: mobile-multimodal
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% over the last 5 minutes."
+          runbook_url: "https://docs.example.com/runbooks/high-cpu"
+
+      # Model-specific alerts
+      - alert: ModelAccuracyDrop
+        expr: model_accuracy_score < 0.85
+        for: 1m
+        labels:
+          severity: warning
+          service: mobile-multimodal
+        annotations:
+          summary: "Model accuracy has dropped"
+          description: "Model accuracy is {{ $value }}, below 85% threshold."
+          runbook_url: "https://docs.example.com/runbooks/accuracy-drop"
+      
+      - alert: ModelLoadFailure
+        expr: increase(model_load_failures_total[5m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          service: mobile-multimodal
+        annotations:
+          summary: "Model failed to load"
+          description: "Model loading has failed {{ $value }} times in the last 5 minutes."
+          runbook_url: "https://docs.example.com/runbooks/model-load-failure"
+
+      # Infrastructure alerts
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is {{ $value }}% available on root filesystem."
+          runbook_url: "https://docs.example.com/runbooks/low-disk-space"
+      
+      - alert: DatabaseConnectionFailure
+        expr: db_connections_failed_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "Database connection failure"
+          description: "Failed to connect to database {{ $value }} times."
+          runbook_url: "https://docs.example.com/runbooks/db-connection-failure"
+
+      # Security alerts
+      - alert: UnauthorizedAccess
+        expr: increase(http_requests_total{status=~"401|403"}[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "High number of unauthorized access attempts"
+          description: "{{ $value }} unauthorized access attempts in the last 5 minutes."
+          runbook_url: "https://docs.example.com/runbooks/unauthorized-access"
+      
+      - alert: AnomalousTraffic
+        expr: rate(http_requests_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Anomalous traffic pattern detected"
+          description: "Request rate is {{ $value }} requests/sec, significantly above normal."
+          runbook_url: "https://docs.example.com/runbooks/anomalous-traffic"
+
+  # Mobile-specific alerts
+  - name: mobile-specific.rules
+    rules:
+      - alert: MobileExportFailure
+        expr: increase(mobile_export_failures_total[10m]) > 0
+        for: 0s
+        labels:
+          severity: warning
+          service: mobile-export
+        annotations:
+          summary: "Mobile model export failure"
+          description: "Mobile model export has failed {{ $value }} times in the last 10 minutes."
+          runbook_url: "https://docs.example.com/runbooks/mobile-export-failure"
+      
+      - alert: QuantizationIssue
+        expr: model_quantization_accuracy_loss > 0.1
+        for: 1m
+        labels:
+          severity: warning
+          service: quantization
+        annotations:
+          summary: "High accuracy loss in quantization"
+          description: "Quantization accuracy loss is {{ $value }}, exceeding 10% threshold."
+          runbook_url: "https://docs.example.com/runbooks/quantization-accuracy"

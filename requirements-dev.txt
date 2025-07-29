@@ -1,0 +1,29 @@
+# Install core requirements first
+-r requirements.txt
+
+# Development Tools
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-xdist>=3.3.0
+pytest-mock>=3.11.0
+pytest-benchmark>=4.0.0
+
+# Code Quality
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+mypy>=1.5.0
+pre-commit>=3.4.0
+
+# Security
+bandit>=1.7.5
+safety>=2.3.0
+
+# Documentation
+mkdocs>=1.5.0
+mkdocs-material>=9.2.0
+mkdocstrings[python]>=0.22.0
+
+# Mobile Export
+tensorflow-lite>=2.15.0
+onnxruntime>=1.15.0

@@ -205,3 +205,44 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ML/AI specific
+*.pth
+*.ckpt
+*.h5
+*.pb
+*.tflite
+*.mlmodel
+*.onnx
+*.dlc
+wandb/
+tensorboard_logs/
+mlruns/
+experiments/
+outputs/
+checkpoints/
+models/
+data/
+datasets/
+.neptune/
+
+# Mobile development
+android/app/build/
+ios/build/
+*.apk
+*.ipa
+*.xcarchive
+
+# Configuration and secrets
+.env.local
+.env.*.local
+config/local_*.yaml
+secrets.yaml
+*.key
+*.pem
+*.p12
+
+# Hardware specific
+.hexagon/
+.npu/
+profile_*.json

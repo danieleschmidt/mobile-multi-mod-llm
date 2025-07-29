@@ -1,0 +1,41 @@
+# Global code ownership for Mobile Multi-Modal LLM
+# This file defines who has review authority for different parts of the codebase
+
+# Default owners for everything in the repo
+* @danieleschmidt @terragon-labs/core-team
+
+# Core ML/AI components require specialized review
+/src/mobile_multimodal/core.py @danieleschmidt @terragon-labs/ml-team
+/src/mobile_multimodal/models/ @terragon-labs/ml-team
+/src/mobile_multimodal/quantization/ @terragon-labs/optimization-team
+
+# Mobile-specific code requires mobile platform expertise
+/mobile-app-android/ @terragon-labs/android-team
+/mobile-app-ios/ @terragon-labs/ios-team
+/scripts/export_models.py @terragon-labs/mobile-team
+
+# Infrastructure and DevOps
+/Dockerfile @terragon-labs/devops-team
+/docker-compose.yml @terragon-labs/devops-team
+/.github/workflows/ @terragon-labs/devops-team
+/monitoring/ @terragon-labs/sre-team
+
+# Security-critical files require security team review
+/SECURITY.md @terragon-labs/security-team
+/.github/workflows/*security* @terragon-labs/security-team
+/scripts/security_audit.py @terragon-labs/security-team
+
+# Documentation requires technical writing review
+/docs/ @terragon-labs/docs-team @danieleschmidt
+/README.md @danieleschmidt @terragon-labs/docs-team
+/*.md @terragon-labs/docs-team
+
+# Configuration files
+/pyproject.toml @danieleschmidt @terragon-labs/core-team
+/requirements*.txt @terragon-labs/core-team
+/.pre-commit-config.yaml @terragon-labs/devops-team
+
+# Test files can be reviewed by respective domain teams
+/tests/mobile/ @terragon-labs/mobile-team
+/tests/security/ @terragon-labs/security-team
+/tests/benchmarks/ @terragon-labs/ml-team @terragon-labs/optimization-team

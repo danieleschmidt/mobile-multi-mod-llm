@@ -47,3 +47,69 @@ repos:
       - id: ggshield
         language: python
         stages: [commit]
+
+  # ADVANCED: Additional security and quality hooks
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.3.2
+    hooks:
+      - id: python-safety-dependencies-check
+
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: ["--convention=google"]
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.10.1
+    hooks:
+      - id: pyupgrade
+        args: [--py310-plus]
+
+  - repo: https://github.com/pycqa/autoflake
+    rev: v2.2.0
+    hooks:
+      - id: autoflake
+        args: [--remove-all-unused-imports, --in-place]
+
+  # ADVANCED: License and copyright enforcement
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.4
+    hooks:
+      - id: insert-license
+        files: \.py$
+        args:
+          - --license-filepath
+          - LICENSE_HEADER.txt
+          - --comment-style
+          - "#"
+
+  # ADVANCED: Mobile-specific checks
+  - repo: local
+    hooks:
+      - id: check-mobile-exports
+        name: Validate mobile model exports
+        entry: python scripts/validate_mobile_exports.py
+        language: system
+        files: ^(src/mobile_multimodal/export|scripts/export_models\.py)
+        pass_filenames: false
+
+      - id: check-quantization-accuracy
+        name: Validate quantization accuracy
+        entry: python scripts/check_quantization_drift.py
+        language: system
+        files: ^src/mobile_multimodal/quantization/
+        pass_filenames: false
+
+      - id: security-audit
+        name: Advanced security audit
+        entry: python scripts/security_audit.py
+        language: system
+        files: ^(src/|scripts/|tests/).*\.py$
+        pass_filenames: false

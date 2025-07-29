@@ -1,0 +1,71 @@
+site_name: Mobile Multi-Modal LLM
+site_description: Tiny (<35 MB) vision-text transformer for on-device mobile AI
+site_url: https://mobile-multimodal-llm.readthedocs.io
+repo_url: https://github.com/terragon-labs/mobile-multimodal-llm
+repo_name: terragon-labs/mobile-multimodal-llm
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - User Guide:
+    - Installation: guides/installation.md
+    - Quick Start: guides/quickstart.md
+    - Model Export: guides/export.md
+    - Mobile Integration: guides/mobile.md
+  - Tutorials:
+    - Basic Usage: tutorials/basic.md
+    - Custom Training: tutorials/training.md
+    - Quantization: tutorials/quantization.md
+    - Mobile Deployment: tutorials/mobile-deploy.md
+  - API Reference:
+    - Core: api/core.md
+    - Models: api/models.md
+    - Export: api/export.md
+    - Benchmarks: api/benchmarks.md
+  - Development:
+    - Contributing: CONTRIBUTING.md
+    - Development Guide: DEVELOPMENT.md
+    - Architecture: guides/architecture.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html

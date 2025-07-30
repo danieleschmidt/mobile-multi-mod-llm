@@ -1,0 +1,77 @@
+name: Bug Report
+description: Report a bug in the mobile multimodal LLM
+title: "[BUG] "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Please provide detailed information to help us reproduce and fix the issue.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component is affected?
+      options:
+        - Model Training
+        - Model Export/Quantization
+        - Mobile Inference (Android)
+        - Mobile Inference (iOS)
+        - Python API
+        - Performance/Benchmarking
+        - Documentation
+        - Build System/CI
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: Describe what happened and what you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the issue
+      placeholder: |
+        1. Load model with...
+        2. Run inference on...
+        3. Observe error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Your environment details
+      placeholder: |
+        - OS: [e.g., Ubuntu 22.04, macOS 13.0, Android 12]
+        - Python version: [e.g., 3.11.5]
+        - Package version: [e.g., 0.1.0]
+        - Device: [e.g., Pixel 8 Pro, iPhone 15]
+        - Hardware: [e.g., Snapdragon 8 Gen 3, A17 Pro]
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: Any relevant error messages or logs
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem (screenshots, performance metrics, etc.)

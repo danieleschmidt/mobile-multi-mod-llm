@@ -30,21 +30,57 @@ updates:
           - "torch*"
           - "torchvision"
           - "torchaudio"
+        update-types:
+          - "minor"
+          - "patch"
+      tensorflow-ecosystem:
+        patterns:
+          - "tensorflow*"
+          - "*tflite*"
+        update-types:
+          - "minor"
+          - "patch"
+      ml-frameworks:
+        patterns:
+          - "transformers"
+          - "tokenizers"
+          - "neural-compressor"
+          - "onnx*"
+        update-types:
+          - "minor"
+          - "patch"
+      mobile-sdks:
+        patterns:
+          - "coremltools"
+          - "*mobile*"
+          - "onnxruntime*"
+        update-types:
+          - "patch"
       testing-framework:
         patterns:
           - "pytest*"
           - "*test*"
+        update-types:
+          - "minor"
+          - "patch"
       linting-tools:
         patterns:
           - "black"
           - "isort"
           - "flake8"
           - "mypy"
-      mobile-sdks:
+        update-types:
+          - "minor"
+          - "patch"
+      security-tools:
         patterns:
-          - "tensorflow*"
-          - "coremltools"
-          - "onnx*"
+          - "bandit"
+          - "safety"
+          - "pip-audit"
+          - "semgrep"
+        update-types:
+          - "minor"
+          - "patch"
     # Security updates (high priority)
     allow:
       - dependency-type: "direct"
@@ -57,6 +93,10 @@ updates:
       - dependency-name: "torch"
         update-types: ["version-update:semver-major"]
       - dependency-name: "tensorflow" 
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "transformers"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "coremltools"
         update-types: ["version-update:semver-major"]
 
   # Docker dependencies

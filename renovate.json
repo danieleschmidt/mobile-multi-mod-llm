@@ -1,0 +1,94 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    "security:openssf-scorecard"
+  ],
+  "schedule": ["before 6am on monday"],
+  "timezone": "UTC",
+  
+  "packageRules": [
+    {
+      "description": "Auto-merge security updates",
+      "matchPackagePatterns": ["*"],
+      "matchUpdateTypes": ["patch"],
+      "vulnerabilityAlerts": true,
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true,
+      "requiredStatusChecks": null
+    },
+    {
+      "description": "Group Python dependencies",
+      "matchManagers": ["pip_requirements", "pip-compile", "pipenv", "poetry"],
+      "groupName": "Python dependencies",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Group ML/AI dependencies with careful review",
+      "matchPackageNames": [
+        "torch", "torchvision", "torchaudio",
+        "tensorflow", "tensorflow-lite",
+        "onnx", "onnxruntime",
+        "transformers", "tokenizers",
+        "coremltools", "neural-compressor"
+      ],
+      "groupName": "ML/AI frameworks",
+      "schedule": ["before 6am on monday"],
+      "automerge": false,
+      "reviewersFromCodeOwners": true,
+      "addLabels": ["ml-dependencies", "needs-testing"]
+    },
+    {
+      "description": "Mobile SDK updates need careful testing",
+      "matchPackageNames": [
+        "tensorflow-lite", "coremltools", "onnxruntime-mobile"
+      ],
+      "groupName": "Mobile SDKs",
+      "schedule": ["before 6am on monday"],
+      "automerge": false,
+      "reviewersFromCodeOwners": true,
+      "addLabels": ["mobile-sdk", "needs-device-testing"]
+    },
+    {
+      "description": "Security tools updates",
+      "matchPackageNames": [
+        "bandit", "safety", "pip-audit", "semgrep"
+      ],
+      "groupName": "Security tools",
+      "automerge": true,
+      "addLabels": ["security-tools"]
+    }
+  ],
+  
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "addLabels": ["security", "vulnerability"]
+  },
+  
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  
+  "separateMajorMinor": true,
+  "separateMinorPatch": false,
+  
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "chore(deps):",
+  
+  "prTitle": "{{#if isPinDigest}}{{{commitMessagePrefix}}} pin {{depName}} digest to {{newDigestShort}}{{else}}{{{commitMessagePrefix}}} {{#if isMajor}}major{{else}}{{#if isMinor}}minor{{else}}patch{{/if}}{{/if}} update{{#if groupName}} ({{groupName}}){{else}}{{#each depNames}} {{.}}{{/each}}{{/if}}{{/if}}",
+  
+  "prBodyTemplate": "This PR contains the following updates:\n\n| Package | Change | Age | Adoption | Passing | Confidence |\n|---|---|---|---|---|---|\n{{#each upgrades as |upgrade|}}\n|{{upgrade.depName}}|{{#if upgrade.displayFrom}}`{{upgrade.displayFrom}}` -> {{/if}}{{#if upgrade.displayTo}}`{{upgrade.displayTo}}`{{/if}}|[![age](https://badges.renovateapi.com/packages/{{upgrade.datasource}}/{{upgrade.depName}}/{{upgrade.newVersion}}/age-slim)](https://docs.renovatebot.com/merge-confidence/)|[![adoption](https://badges.renovateapi.com/packages/{{upgrade.datasource}}/{{upgrade.depName}}/{{upgrade.newVersion}}/adoption-slim)](https://docs.renovatebot.com/merge-confidence/)|[![passing](https://badges.renovateapi.com/packages/{{upgrade.datasource}}/{{upgrade.depName}}/{{upgrade.newVersion}}/compatibility-slim/{{upgrade.currentVersion}})](https://docs.renovatebot.com/merge-confidence/)|[![confidence](https://badges.renovateapi.com/packages/{{upgrade.datasource}}/{{upgrade.depName}}/{{upgrade.newVersion}}/confidence-slim/{{upgrade.currentVersion}})](https://docs.renovatebot.com/merge-confidence/)|\n{{/each}}\n\n---\n\n### Mobile AI/ML Testing Required\n\n{{#if (containsString labels 'ml-dependencies')}}🧠 **ML Dependencies Updated**: Please run mobile inference benchmarks{{/if}}\n{{#if (containsString labels 'mobile-sdk')}}📱 **Mobile SDK Updated**: Please test on physical devices{{/if}}\n\n### Testing Checklist\n- [ ] Unit tests pass\n- [ ] Performance benchmarks within acceptable range\n- [ ] Mobile model exports validate successfully\n- [ ] Device compatibility maintained\n- [ ] Memory usage within limits\n\n---\n\n📅 **Schedule**: {{schedule}}\n🏠 **Automerge**: {{#if automerge}}Enabled{{else}}Disabled{{/if}}\n♻ **Rebasing**: {{#if rebaseWhen}}{{rebaseWhen}}{{else}}Whenever PR becomes conflicted{{/if}}\n\n{{#if hasReleaseNotes}}\n---\n\n{{releaseNotes}}\n{{/if}}",
+  
+  "assignees": ["@terragon-labs/maintainers"],
+  "reviewers": ["@terragon-labs/ml-engineers"],
+  
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/venv/**",
+    "**/.venv/**",
+    "**/site-packages/**"
+  ]
+}

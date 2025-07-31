@@ -1,0 +1,165 @@
+name: 📊 Performance Regression
+description: Report a performance regression in mobile inference
+title: "[PERF] Performance regression: "
+labels: ["performance", "regression", "mobile"]
+assignees:
+  - terragon-labs/performance-team
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a performance regression! This helps us maintain optimal mobile AI performance.
+
+  - type: checkboxes
+    id: environment
+    attributes:
+      label: Environment
+      description: Which environments are affected?
+      options:
+        - label: Android devices
+        - label: iOS devices
+        - label: Edge/embedded devices
+        - label: Cloud inference (reference)
+
+  - type: dropdown
+    id: device_category
+    attributes:
+      label: Device Category
+      description: What type of device is experiencing the regression?
+      options:
+        - Flagship (Snapdragon 8 Gen 3, A17 Pro)
+        - Mid-range (Snapdragon 7 Gen 3, A16)
+        - Budget (Snapdragon 6 Gen 1, A15)
+        - Older devices (3+ years old)
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: version_current
+    attributes:
+      label: Current Version
+      description: Which version shows the performance regression?
+      placeholder: "v0.2.1"
+    validations:
+      required: true
+
+  - type: input
+    id: version_baseline
+    attributes:
+      label: Baseline Version
+      description: Which version had acceptable performance?
+      placeholder: "v0.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regression_type
+    attributes:
+      label: Regression Type
+      description: What type of performance regression?
+      options:
+        - Inference latency (slower inference)
+        - Memory usage (higher memory consumption)
+        - Battery drain (increased power consumption)
+        - Thermal throttling (device heating)
+        - Model accuracy (lower quality outputs)
+        - Startup time (slower initialization)
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Performance Metrics
+      description: Provide specific performance measurements
+      placeholder: |
+        Baseline (v0.2.0):
+        - Inference time: 12ms
+        - Memory usage: 45MB
+        - Battery drain: 2%/hour
+        
+        Current (v0.2.1):
+        - Inference time: 18ms (+50%)
+        - Memory usage: 67MB (+49%)
+        - Battery drain: 3.2%/hour (+60%)
+    validations:
+      required: true
+
+  - type: textarea
+    id: device_specs
+    attributes:
+      label: Device Specifications
+      description: Provide device details for reproduction
+      placeholder: |
+        - Device: Samsung Galaxy S24 Ultra
+        - OS: Android 14 (One UI 6.1)
+        - Chipset: Snapdragon 8 Gen 3
+        - RAM: 12GB
+        - NPU: Hexagon NPU enabled
+        - Thermal state: Normal (< 40°C)
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Reproduction Steps
+      description: How to reproduce the performance regression?
+      placeholder: |
+        1. Load the INT2 quantized model
+        2. Run inference on 224x224 image
+        3. Measure inference time over 100 iterations
+        4. Compare with baseline version
+    validations:
+      required: true
+
+  - type: textarea
+    id: benchmark_data
+    attributes:
+      label: Benchmark Data
+      description: Attach benchmark results if available
+      placeholder: |
+        Paste benchmark JSON or attach files:
+        - benchmark-current.json
+        - benchmark-baseline.json
+        - memory-profile.json
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this regression?
+      options:
+        - Critical (>100% performance decrease)
+        - High (50-100% performance decrease)
+        - Medium (20-50% performance decrease)
+        - Low (<20% performance decrease)
+      default: 1
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact Assessment
+      description: What areas are impacted?
+      options:
+        - label: Real-time inference performance
+        - label: Battery life significantly affected
+        - label: Device thermal management
+        - label: User experience degraded
+        - label: Production deployment affected
+        - label: Mobile app crashes/ANRs
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: Any other relevant information
+      placeholder: |
+        - Profiling data
+        - Memory dumps
+        - Thermal logs
+        - Related commits/PRs
+        - Workarounds attempted

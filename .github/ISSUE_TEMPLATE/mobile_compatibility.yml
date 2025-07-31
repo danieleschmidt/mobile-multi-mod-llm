@@ -1,0 +1,184 @@
+name: 📱 Mobile Compatibility Issue
+description: Report device compatibility or mobile-specific issues
+title: "[MOBILE] Compatibility issue: "
+labels: ["mobile", "compatibility", "device-specific"]
+assignees:
+  - terragon-labs/mobile-team
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a mobile compatibility issue! This helps us ensure broad device support.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which mobile platform?
+      options:
+        - Android
+        - iOS
+        - Both Android and iOS
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: device_info
+    attributes:
+      label: Device Information
+      description: Provide detailed device specifications
+      placeholder: |
+        **Android:**
+        - Device: Google Pixel 8 Pro
+        - OS Version: Android 14 (API 34)
+        - Chipset: Google Tensor G3
+        - RAM: 12GB
+        - NPU/AI Accelerator: Tensor Processing Unit
+        - Build: AP2A.240805.005
+        
+        **iOS:**
+        - Device: iPhone 15 Pro Max
+        - OS Version: iOS 17.5.1
+        - Chipset: A17 Pro
+        - RAM: 8GB
+        - Neural Engine: 16-core Neural Engine
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue_type
+    attributes:
+      label: Issue Type
+      description: What type of compatibility issue?
+      options:
+        - Model loading failure
+        - Inference crashes/errors
+        - Performance significantly degraded
+        - Memory allocation failures
+        - NPU/Neural Engine not utilized
+        - Quantization format not supported
+        - Export format incompatible
+        - Runtime library missing
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: error_details
+    attributes:
+      label: Error Details
+      description: Provide specific error messages and logs
+      placeholder: |
+        Error message:
+        ```
+        [ERROR] Failed to load INT2 quantized model: Unsupported operation type
+        java.lang.RuntimeException: Cannot create interpreter for model
+        ```
+        
+        Logcat/Console output:
+        ```
+        E/TfLiteNnapi: Failed to get input operand type
+        W/Hexagon: INT2 quantization not supported on this device
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: model_config
+    attributes:
+      label: Model Configuration
+      description: Which model configuration is failing?
+      placeholder: |
+        - Model format: TensorFlow Lite (.tflite)
+        - Quantization: INT2 with Hexagon delegate
+        - Model size: 34.2MB
+        - Input shape: [1, 224, 224, 3]
+        - Export command: `python export_tflite.py --quantize int2 --delegate hexagon`
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Reproduction Steps
+      description: How to reproduce this compatibility issue?
+      placeholder: |
+        1. Install app on affected device
+        2. Attempt to load mobile_multimodal_int2.tflite
+        3. Initialize with Hexagon delegate
+        4. Run inference on test image
+        5. Observe crash/error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected Behavior
+      description: What should happen instead?
+      placeholder: |
+        - Model should load successfully
+        - Inference should complete in ~15ms
+        - Memory usage should be ~45MB
+        - NPU acceleration should be utilized
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current Workaround
+      description: Any temporary solutions found?
+      placeholder: |
+        - Fallback to CPU inference works but 3x slower
+        - INT8 quantization works on this device
+        - Disabling Hexagon delegate allows loading
+
+  - type: checkboxes
+    id: affected_features
+    attributes:
+      label: Affected Features
+      description: Which features are impacted?
+      options:
+        - label: Image captioning
+        - label: OCR text extraction
+        - label: Visual question answering
+        - label: Text-image retrieval
+        - label: Real-time inference
+        - label: Batch processing
+
+  - type: dropdown
+    id: device_prevalence
+    attributes:
+      label: Device Prevalence
+      description: How common is this device type?
+      options:
+        - Very common (flagship/popular device)
+        - Common (mid-range device)
+        - Uncommon (older/niche device)
+        - Unknown
+      default: 0
+
+  - type: textarea
+    id: additional_testing
+    attributes:
+      label: Additional Testing
+      description: Have you tested on other devices?
+      placeholder: |
+        **Working devices:**
+        - Samsung Galaxy S24 (Snapdragon 8 Gen 3) ✅
+        - iPhone 15 Pro (A17 Pro) ✅
+        
+        **Failing devices:**
+        - Google Pixel 7 (Tensor G2) ❌
+        - OnePlus 11 (Snapdragon 8 Gen 2) ❌
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: Any other relevant information
+      placeholder: |
+        - SDK versions used
+        - Build configuration
+        - Related GitHub issues
+        - Device-specific documentation
+        - Hardware limitations discovered

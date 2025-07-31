@@ -1,0 +1,74 @@
+# Git attributes for mobile multimodal LLM project
+
+# Text files
+*.md text eol=lf
+*.txt text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.sh text eol=lf
+
+# Model files - track with Git LFS
+*.onnx filter=lfs diff=lfs merge=lfs -text
+*.tflite filter=lfs diff=lfs merge=lfs -text
+*.mlmodel filter=lfs diff=lfs merge=lfs -text
+*.mlpackage filter=lfs diff=lfs merge=lfs -text
+*.dlc filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text
+*.safetensors filter=lfs diff=lfs merge=lfs -text
+*.h5 filter=lfs diff=lfs merge=lfs -text
+*.pb filter=lfs diff=lfs merge=lfs -text
+
+# Dataset files - track with Git LFS
+*.npy filter=lfs diff=lfs merge=lfs -text
+*.npz filter=lfs diff=lfs merge=lfs -text
+*.pkl filter=lfs diff=lfs merge=lfs -text
+*.pickle filter=lfs diff=lfs merge=lfs -text
+*.hdf5 filter=lfs diff=lfs merge=lfs -text
+
+# Image and video files
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.svg text eol=lf
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+*.avi filter=lfs diff=lfs merge=lfs -text
+*.mov filter=lfs diff=lfs merge=lfs -text
+
+# Archive files
+*.zip binary
+*.tar.gz filter=lfs diff=lfs merge=lfs -text
+*.tar.bz2 filter=lfs diff=lfs merge=lfs -text
+*.7z filter=lfs diff=lfs merge=lfs -text
+
+# Mobile-specific files
+*.apk filter=lfs diff=lfs merge=lfs -text
+*.ipa filter=lfs diff=lfs merge=lfs -text
+*.aab filter=lfs diff=lfs merge=lfs -text
+
+# Documentation export
+*.pdf filter=lfs diff=lfs merge=lfs -text
+
+# Lock files should not be modified by Git
+package-lock.json binary
+yarn.lock binary
+Pipfile.lock binary
+poetry.lock binary
+
+# Jupyter notebooks - clean output on diff
+*.ipynb filter=nbstripout diff=ipynb merge=nbmerge-driver
+
+# Mobile development
+*.xcodeproj/* linguist-generated
+*.pbxproj merge=union
+
+# Language statistics - exclude generated files
+*.pb linguist-generated=true
+*_pb2.py linguist-generated=true
+docs/build/* linguist-documentation
+monitoring/grafana/dashboards/*.json linguist-generated=true

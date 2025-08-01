@@ -135,11 +135,12 @@ secrets.yaml
 .ruff_cache/
 
 # =============================================================================
-# Docker
+# Docker (keep Dockerfile and docker-compose.yml)
 # =============================================================================
-Dockerfile*
-docker-compose*.yml
-.dockerignore
+Dockerfile.*
+docker-compose.*.yml
+!Dockerfile
+!docker-compose.yml
 
 # =============================================================================
 # CI/CD
@@ -179,25 +180,24 @@ Thumbs.db
 *.7z
 
 # =============================================================================
-# Development Tools
+# Development Tools (keep essential config files)
 # =============================================================================
 .pre-commit-config.yaml
 .editorconfig
 tox.ini
-pytest.ini
-setup.cfg
-pyproject.toml
 Makefile
+!pytest.ini
+!pyproject.toml
 
 # =============================================================================
-# Documentation Source
+# Documentation Source (keep LICENSE and essential docs)
 # =============================================================================
-README.md
 CHANGELOG.md
 CONTRIBUTING.md
-LICENSE
 CODE_OF_CONDUCT.md
 SECURITY.md
+!README.md
+!LICENSE
 
 # =============================================================================
 # Monitoring and Logging

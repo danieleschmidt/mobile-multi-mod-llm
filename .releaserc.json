@@ -1,0 +1,71 @@
+{
+  "branches": ["main"],
+  "repositoryUrl": "https://github.com/danieleschmidt/mobile-multi-mod-llm",
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/changelog",
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "python scripts/update_version.py ${nextRelease.version}",
+        "publishCmd": "python scripts/build.sh --type release"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "CHANGELOG.md",
+          "pyproject.toml",
+          "src/mobile_multimodal/__init__.py"
+        ],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "dist/*.whl",
+            "label": "Python Wheel"
+          },
+          {
+            "path": "dist/*.tar.gz", 
+            "label": "Source Distribution"
+          },
+          {
+            "path": "models/android/*.tflite",
+            "label": "Android TensorFlow Lite Model"
+          },
+          {
+            "path": "models/ios/*.mlpackage",
+            "label": "iOS Core ML Model"
+          }
+        ]
+      }
+    ]
+  ],
+  "preset": "conventionalcommits",
+  "parserOpts": {
+    "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
+  },
+  "writerOpts": {
+    "commitsSort": ["subject", "scope"]
+  },
+  "releaseRules": [
+    {"type": "feat", "release": "minor"},
+    {"type": "fix", "release": "patch"},
+    {"type": "perf", "release": "patch"},
+    {"type": "revert", "release": "patch"},
+    {"type": "docs", "release": false},
+    {"type": "style", "release": false},
+    {"type": "chore", "release": false},
+    {"type": "refactor", "release": "patch"},
+    {"type": "test", "release": false},
+    {"type": "build", "release": false},
+    {"type": "ci", "release": false},
+    {"scope": "no-release", "release": false}
+  ]
+}

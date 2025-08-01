@@ -1,0 +1,222 @@
+# Terragon Autonomous SDLC Value Configuration
+# Repository: mobile-multimodal-llm
+# Maturity Level: Maturing (50-75% SDLC maturity)
+# Generated: 2025-08-01T15:14:00Z
+
+scoring:
+  # Adaptive scoring weights based on repository maturity
+  weights:
+    nascent:
+      wsjf: 0.4
+      ice: 0.3
+      technicalDebt: 0.2
+      security: 0.1
+    developing:
+      wsjf: 0.5
+      ice: 0.2
+      technicalDebt: 0.2
+      security: 0.1
+    maturing:
+      wsjf: 0.6
+      ice: 0.1
+      technicalDebt: 0.2
+      security: 0.1
+    advanced:
+      wsjf: 0.5
+      ice: 0.1
+      technicalDebt: 0.3
+      security: 0.1
+  
+  # Current repository classification
+  current_maturity: "maturing"
+  
+  # Scoring thresholds
+  thresholds:
+    minScore: 10
+    maxRisk: 0.8
+    securityBoost: 2.0
+    complianceBoost: 1.8
+    performanceBoost: 1.5
+    documentationPenalty: 0.6
+
+# Value discovery configuration
+discovery:
+  # Signal sources for value identification
+  sources:
+    - gitHistory
+    - staticAnalysis
+    - issueTrackers
+    - vulnerabilityDatabases
+    - performanceMonitoring
+    - userFeedback
+    - codeComments
+    - dependencyUpdates
+  
+  # Analysis tools integration
+  tools:
+    staticAnalysis:
+      - flake8
+      - mypy
+      - bandit
+      - black
+      - isort
+    security:
+      - safety
+      - pip-audit
+      - bandit
+      - cyclonedx-bom
+    performance:
+      - pytest-benchmark
+      - memory-profiler
+      - performance-regression-monitor
+    quality:
+      - pytest
+      - pytest-cov
+      - complexity-analysis
+  
+  # Discovery patterns for this repository
+  patterns:
+    todoMarkers:
+      - "TODO"
+      - "FIXME" 
+      - "HACK"
+      - "XXX"
+      - "DEPRECATED"
+      - "BUG"
+    debtIndicators:
+      - "quick fix"
+      - "temporary"
+      - "workaround"
+      - "refactor needed"
+      - "optimize this"
+    opportunityKeywords:
+      - "mobile optimization"
+      - "quantization"
+      - "performance"
+      - "memory usage"
+      - "inference speed"
+      - "model compression"
+
+# Execution configuration
+execution:
+  # Execution constraints
+  maxConcurrentTasks: 1
+  maxExecutionTimeHours: 4
+  
+  # Quality gates
+  testRequirements:
+    minCoverage: 80
+    performanceRegressionThreshold: 5
+    securityScanRequired: true
+    lintingRequired: true
+  
+  # Rollback triggers
+  rollbackTriggers:
+    - testFailure
+    - buildFailure
+    - securityViolation
+    - performanceRegression
+    - lintingFailure
+  
+  # Branch strategy
+  branchStrategy:
+    prefix: "auto-value"
+    naming: "${item.id}-${item.slug}"
+    baseBranch: "main"
+
+# Repository-specific adaptations
+repository:
+  name: "mobile-multimodal-llm"
+  primaryLanguage: "python"
+  framework: "pytorch"
+  architecture: "mobile-ai"
+  
+  # Key focus areas for this repository
+  focusAreas:
+    - mobileOptimization
+    - quantization
+    - performance
+    - memoryEfficiency
+    - inferenceSpeed
+    - modelCompression
+    - securityCompliance
+    - testCoverage
+  
+  # Critical files and directories
+  criticalPaths:
+    - "src/mobile_multimodal/"
+    - "scripts/"
+    - "tests/"
+    - "pyproject.toml"
+    - "requirements*.txt"
+    - "Dockerfile"
+  
+  # Commands and scripts
+  commands:
+    test: "pytest tests/ --cov=src"
+    lint: "flake8 src/ && black --check src/ && isort --check src/"
+    typecheck: "mypy src/"
+    security: "bandit -r src/ && safety check && pip-audit"
+    build: "python -m build"
+    benchmark: "pytest tests/benchmarks/ --benchmark-only"
+
+# Learning and adaptation
+learning:
+  # Model adaptation parameters
+  adaptation:
+    learningRate: 0.1
+    confidenceThreshold: 0.7
+    minSamplesForUpdate: 5
+  
+  # Feedback collection
+  feedback:
+    trackExecutionTime: true
+    trackAccuracy: true
+    trackUserSatisfaction: true
+    trackBusinessImpact: true
+  
+  # Historical data retention
+  retention:
+    maxHistoryEntries: 1000
+    maxAgeMonths: 12
+    compressionThreshold: 100
+
+# Integration settings
+integrations:
+  github:
+    enabled: true
+    prTemplate: ".terragon/pr_template.md"
+    labelStrategy: "auto-assign"
+    reviewerStrategy: "codeowners"
+  
+  monitoring:
+    prometheus: true
+    grafana: true
+    alerting: true
+  
+  notifications:
+    slack: false
+    email: false
+    webhook: false
+
+# Value categories specific to mobile AI
+valueCategories:
+  mobileOptimization:
+    weight: 1.5
+    keywords: ["mobile", "quantization", "compression", "inference"]
+  
+  performance:
+    weight: 1.3
+    keywords: ["speed", "latency", "fps", "memory", "cpu"]
+  
+  security:
+    weight: 1.8
+    keywords: ["vulnerability", "cve", "security", "audit"]
+  
+  quality:
+    weight: 1.2
+    keywords: ["test", "coverage", "lint", "type", "documentation"]
+  
+  innovation:
+    weight: 1.4
+    keywords: ["ai", "ml", "neural", "transformer", "llm"]

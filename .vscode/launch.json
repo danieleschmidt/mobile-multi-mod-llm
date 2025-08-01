@@ -85,6 +85,30 @@
           "remoteRoot": "/app"
         }
       ]
+    },
+    {
+      "name": "Python: Quantization Analysis",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/check_quantization_drift.py",
+      "args": ["--original", "models/base_model.pth", "--quantized", "models/quantized_int2.tflite"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
+    },
+    {
+      "name": "Python: Mobile Validation",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/validate_mobile_exports.py",
+      "args": ["--android-model", "models/android/model.tflite", "--ios-model", "models/ios/model.mlpackage"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
     }
   ]
 }

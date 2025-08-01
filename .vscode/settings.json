@@ -1,5 +1,6 @@
 {
   "python.defaultInterpreterPath": "./venv/bin/python",
+  "python.terminal.activateEnvironment": true,
   "python.linting.enabled": true,
   "python.linting.pylintEnabled": false,
   "python.linting.flake8Enabled": true,
@@ -8,35 +9,105 @@
   "python.formatting.provider": "black",
   "python.formatting.blackArgs": ["--line-length", "88"],
   "python.sortImports.args": ["--profile", "black"],
-  "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "source.organizeImports": true
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "tests",
+    "-v",
+    "--tb=short"
+  ],
+  "python.analysis.extraPaths": ["./src"],
+  "python.analysis.typeCheckingMode": "strict",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.completeFunctionParens": true,
+  "python.analysis.autoSearchPaths": true,
+  "files.associations": {
+    "*.toml": "toml",
+    "*.yaml": "yaml",
+    "*.yml": "yaml",
+    "*.md": "markdown",
+    "*.cfg": "ini",
+    "*.ini": "ini",
+    "*.conf": "ini",
+    "requirements*.txt": "pip-requirements",
+    ".env*": "dotenv",
+    "Dockerfile*": "dockerfile"
   },
   "files.exclude": {
     "**/__pycache__": true,
     "**/*.pyc": true,
-    ".pytest_cache": true,
-    ".mypy_cache": true,
-    ".coverage": true,
-    "htmlcov": true,
-    "*.egg-info": true
+    "**/*.pyo": true,
+    "**/*.pyd": true,
+    "**/.Python": true,
+    "**/build": true,
+    "**/develop-eggs": true,
+    "**/dist": true,
+    "**/downloads": true,
+    "**/eggs": true,
+    "**/.eggs": true,
+    "**/lib": true,
+    "**/lib64": true,
+    "**/parts": true,
+    "**/sdist": true,
+    "**/var": true,
+    "**/wheels": true,
+    "**/*.egg-info": true,
+    "**/.installed.cfg": true,
+    "**/MANIFEST": true,
+    "**/.coverage": true,
+    "**/htmlcov": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/node_modules": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true
   },
-  "python.testing.pytestEnabled": true,
-  "python.testing.pytestArgs": [
-    "tests"
-  ],
-  "python.analysis.extraPaths": ["./src"],
-  "python.analysis.typeCheckingMode": "strict",
-  "files.associations": {
-    "*.toml": "toml",
-    "*.yaml": "yaml",
-    "*.yml": "yaml"
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "**/*.code-search": true,
+    "**/models/**/*.bin": true,
+    "**/models/**/*.pth": true,
+    "**/models/**/*.onnx": true,
+    "**/models/**/*.tflite": true,
+    "**/data/**/*.jpg": true,
+    "**/data/**/*.png": true,
+    "**/data/**/*.jpeg": true,
+    "**/logs/**/*.log": true
   },
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 4,
+  "editor.detectIndentation": true,
+  "editor.rulers": [88],
+  "editor.wordWrap": "bounded",
+  "editor.wordWrapColumn": 88,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": true,
+    "source.fixAll": true
+  },
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+  "git.autofetch": true,
+  "git.decorations.enabled": true,
+  "git.ignoreLimitWarning": true,
+  "jupyter.askForKernelRestart": false,
+  "jupyter.alwaysTrustNotebooks": true,
+  "jupyter.generateCellTags": true,
+  "jupyter.interactiveWindow.collapseCellInputCode": "fromEditor",
+  "makefile.extensionOutputFolder": "./.vscode",
   "yaml.schemas": {
     "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yml",
+    "https://json.schemastore.org/github-action": ".github/actions/*/action.yml",
+    "https://json.schemastore.org/pre-commit-config": ".pre-commit-config.yaml",
     "https://json.schemastore.org/docker-compose.json": "docker-compose*.yml"
   },
-  "git.ignoreLimitWarning": true,
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.defaultProfile.osx": "zsh",
   "terminal.integrated.env.linux": {
     "PYTHONPATH": "${workspaceFolder}/src"
   },
@@ -45,5 +116,27 @@
   },
   "terminal.integrated.env.windows": {
     "PYTHONPATH": "${workspaceFolder}\\src"
-  }
+  },
+  "workbench.editor.enablePreview": false,
+  "workbench.editor.enablePreviewFromQuickOpen": false,
+  "explorer.confirmDelete": false,
+  "explorer.confirmDragAndDrop": false,
+  "markdown.preview.fontSize": 14,
+  "markdown.preview.lineHeight": 1.6,
+  "cmake.configureOnOpen": false,
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "package.json"
+      ],
+      "url": "https://json.schemastore.org/package"
+    },
+    {
+      "fileMatch": [
+        "pyproject.toml"
+      ],
+      "url": "https://json.schemastore.org/pyproject"
+    }
+  ]
 }

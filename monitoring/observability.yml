@@ -1,0 +1,445 @@
+# Comprehensive Observability Configuration
+# Mobile Multi-Modal LLM - Monitoring, Logging, and Tracing
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+logging:
+  # Structured logging format
+  format: "json"
+  level: "INFO"
+  
+  # Log rotation
+  rotation:
+    max_size: "100MB"
+    max_files: 10
+    max_age: "30d"
+    compress: true
+  
+  # Log destinations
+  outputs:
+    - type: "file"
+      path: "/app/logs/application.log"
+      level: "INFO"
+    - type: "file"
+      path: "/app/logs/error.log"
+      level: "ERROR"
+    - type: "stdout"
+      level: "INFO"
+    - type: "syslog"
+      network: "udp"
+      address: "localhost:514"
+      facility: "daemon"
+      level: "WARNING"
+  
+  # Structured fields
+  fields:
+    service: "mobile-multimodal-llm"
+    version: "${APP_VERSION}"
+    environment: "${ENVIRONMENT}"
+    instance_id: "${HOSTNAME}"
+    build_hash: "${BUILD_HASH}"
+  
+  # Log sampling for high-volume events
+  sampling:
+    inference_logs:
+      rate: 0.1  # Sample 10% of inference logs
+      burst: 100 # Allow burst of 100 logs
+    debug_logs:
+      rate: 0.01 # Sample 1% of debug logs
+      burst: 10
+
+# =============================================================================
+# Metrics Configuration
+# =============================================================================
+metrics:
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+    namespace: "mobile_multimodal"
+    
+    # Custom metrics
+    custom_metrics:
+      # Model performance metrics
+      - name: "model_inference_duration_seconds"
+        type: "histogram"
+        description: "Time spent on model inference"
+        labels: ["model_type", "task", "quantization"]
+        buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+      
+      - name: "model_inference_requests_total"
+        type: "counter"
+        description: "Total number of inference requests"
+        labels: ["model_type", "task", "status"]
+      
+      - name: "model_accuracy_score"
+        type: "gauge"
+        description: "Current model accuracy score"
+        labels: ["model_type", "task", "dataset"]
+      
+      - name: "model_memory_usage_bytes"
+        type: "gauge"
+        description: "Memory usage by model"
+        labels: ["model_type", "component"]
+      
+      - name: "model_load_duration_seconds"
+        type: "gauge"
+        description: "Time taken to load model"
+        labels: ["model_type", "quantization"]
+      
+      # Mobile-specific metrics
+      - name: "mobile_export_duration_seconds"
+        type: "histogram"
+        description: "Time spent exporting mobile models"
+        labels: ["platform", "quantization"]
+        buckets: [1, 5, 10, 30, 60, 120, 300, 600]
+      
+      - name: "mobile_export_size_bytes"
+        type: "gauge"
+        description: "Size of exported mobile models"
+        labels: ["platform", "quantization"]
+      
+      - name: "quantization_accuracy_loss"
+        type: "gauge"
+        description: "Accuracy loss due to quantization"
+        labels: ["quantization_type", "task"]
+      
+      # System metrics
+      - name: "gpu_memory_usage_bytes"
+        type: "gauge"
+        description: "GPU memory usage"
+        labels: ["gpu_id", "memory_type"]
+      
+      - name: "batch_processing_duration_seconds"
+        type: "histogram"
+        description: "Time spent processing batches"
+        labels: ["batch_size", "task"]
+        buckets: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
+
+  # Business metrics
+  business_metrics:
+    enabled: true
+    metrics:
+      - name: "api_requests_per_user"
+        type: "counter"
+        description: "API requests per user"
+        labels: ["user_id", "endpoint"]
+      
+      - name: "model_usage_by_task"
+        type: "counter"
+        description: "Model usage breakdown by task"
+        labels: ["task", "user_type"]
+      
+      - name: "error_rate_by_endpoint"
+        type: "gauge"
+        description: "Error rate for each endpoint"
+        labels: ["endpoint", "error_type"]
+
+# =============================================================================
+# Tracing Configuration
+# =============================================================================
+tracing:
+  # OpenTelemetry configuration
+  opentelemetry:
+    enabled: true
+    service_name: "mobile-multimodal-llm"
+    service_version: "${APP_VERSION}"
+    
+    # Jaeger exporter
+    jaeger:
+      enabled: true
+      endpoint: "http://jaeger:14268/api/traces"
+      
+    # OTLP exporter
+    otlp:
+      enabled: false
+      endpoint: "http://otel-collector:4317"
+    
+    # Sampling configuration
+    sampling:
+      type: "probabilistic"
+      rate: 0.001  # Sample 0.1% of traces
+      
+    # Instrumentation
+    instrumentations:
+      - "requests"
+      - "torch"
+      - "sqlalchemy"
+      - "redis"
+      - "grpc"
+  
+  # Custom trace spans
+  custom_spans:
+    - name: "model_inference"
+      operation: "inference"
+      tags:
+        - "model.type"
+        - "model.task"
+        - "model.quantization"
+        - "input.size"
+        - "output.size"
+    
+    - name: "model_loading"
+      operation: "load_model"
+      tags:
+        - "model.path"
+        - "model.type"
+        - "load.duration"
+        - "memory.usage"
+    
+    - name: "mobile_export"
+      operation: "export_mobile"
+      tags:
+        - "export.platform"
+        - "export.quantization"
+        - "export.size"
+        - "export.duration"
+
+# =============================================================================
+# Health Checks Integration
+# =============================================================================
+health_monitoring:
+  # Health check endpoints
+  endpoints:
+    liveness: "/alive"
+    readiness: "/ready"
+    health: "/health"
+    model_health: "/model/health"
+  
+  # Health check intervals
+  intervals:
+    liveness: 10   # seconds
+    readiness: 15  # seconds
+    health: 30     # seconds
+    model_health: 60  # seconds
+  
+  # Health check timeouts
+  timeouts:
+    liveness: 5    # seconds
+    readiness: 10  # seconds
+    health: 15     # seconds
+    model_health: 30  # seconds
+
+# =============================================================================
+# Alerting Integration
+# =============================================================================
+alerting:
+  # Alert routing
+  routing:
+    - match:
+        severity: "critical"
+      receiver: "pagerduty-critical"
+      group_wait: "10s"
+      group_interval: "5m"
+      repeat_interval: "12h"
+    
+    - match:
+        severity: "warning"
+      receiver: "slack-warnings"
+      group_wait: "30s"
+      group_interval: "15m"
+      repeat_interval: "4h"
+    
+    - match:
+        service: "mobile-export"
+      receiver: "mobile-team"
+      group_wait: "1m"
+      group_interval: "30m"
+      repeat_interval: "24h"
+  
+  # Notification channels
+  receivers:
+    - name: "pagerduty-critical"
+      pagerduty_configs:
+        - routing_key: "${PAGERDUTY_ROUTING_KEY}"
+          description: "Critical alert: {{ .GroupLabels.alertname }}"
+          severity: "critical"
+    
+    - name: "slack-warnings"
+      slack_configs:
+        - api_url: "${SLACK_WEBHOOK_URL}"
+          channel: "#mobile-ml-alerts"
+          title: "Warning: {{ .GroupLabels.alertname }}"
+          text: "{{ range .Alerts }}{{ .Annotations.description }}{{ end }}"
+    
+    - name: "mobile-team"
+      email_configs:
+        - to: "mobile-team@company.com"
+          subject: "Mobile ML Alert: {{ .GroupLabels.alertname }}"
+          body: "{{ range .Alerts }}{{ .Annotations.description }}{{ end }}"
+
+# =============================================================================
+# Dashboard Configuration
+# =============================================================================
+dashboards:
+  # Grafana dashboard provisioning
+  grafana:
+    provisioning_path: "/etc/grafana/provisioning/dashboards"
+    
+    # Dashboard definitions
+    dashboards:
+      - name: "mobile-multimodal-overview"
+        file: "mobile-multimodal-overview.json"
+        folder: "Mobile ML"
+        
+      - name: "model-performance"
+        file: "model-performance.json"
+        folder: "Mobile ML"
+        
+      - name: "infrastructure-monitoring"
+        file: "infrastructure-monitoring.json"
+        folder: "Infrastructure"
+        
+      - name: "mobile-export-monitoring"
+        file: "mobile-export-monitoring.json"
+        folder: "Mobile ML"
+  
+  # Custom dashboard variables
+  variables:
+    - name: "environment"
+      type: "query"
+      query: "label_values(environment)"
+      refresh: "on_time_range_change"
+    
+    - name: "model_type"
+      type: "query"
+      query: "label_values(model_inference_requests_total, model_type)"
+      refresh: "on_time_range_change"
+    
+    - name: "instance"
+      type: "query"
+      query: "label_values(up{job=\"mobile-multimodal-app\"}, instance)"
+      refresh: "on_time_range_change"
+
+# =============================================================================
+# Performance Monitoring
+# =============================================================================
+performance_monitoring:
+  # Application Performance Monitoring (APM)
+  apm:
+    enabled: true
+    sample_rate: 0.1
+    
+    # Transaction tracking
+    transactions:
+      - name: "model_inference"
+        threshold_ms: 100
+        slow_threshold_ms: 500
+      
+      - name: "model_loading"
+        threshold_ms: 10000
+        slow_threshold_ms: 30000
+      
+      - name: "mobile_export"
+        threshold_ms: 60000
+        slow_threshold_ms: 300000
+  
+  # Profiling
+  profiling:
+    enabled: true
+    sample_rate: 0.01
+    
+    # CPU profiling
+    cpu:
+      enabled: true
+      duration_seconds: 30
+      interval_seconds: 3600  # Every hour
+    
+    # Memory profiling
+    memory:
+      enabled: true
+      duration_seconds: 60
+      interval_seconds: 1800  # Every 30 minutes
+    
+    # GPU profiling
+    gpu:
+      enabled: true
+      duration_seconds: 30
+      interval_seconds: 3600  # Every hour
+
+# =============================================================================
+# Security Monitoring
+# =============================================================================
+security_monitoring:
+  # Security event logging
+  events:
+    - name: "unauthorized_access"
+      description: "Failed authentication attempts"
+      threshold: 5
+      window_minutes: 5
+    
+    - name: "anomalous_requests"
+      description: "Unusual request patterns"
+      threshold: 100
+      window_minutes: 1
+    
+    - name: "model_tampering"
+      description: "Unexpected model file changes"
+      threshold: 1
+      window_minutes: 1
+  
+  # Audit logging
+  audit:
+    enabled: true
+    events:
+      - "model_access"
+      - "configuration_change"
+      - "user_authentication"
+      - "admin_actions"
+    
+    retention_days: 90
+    encryption: true
+
+# =============================================================================
+# Data Retention Policies
+# =============================================================================
+retention:
+  # Metrics retention
+  metrics:
+    high_resolution: "7d"    # 15s resolution for 7 days
+    medium_resolution: "30d" # 1m resolution for 30 days
+    low_resolution: "365d"   # 5m resolution for 1 year
+  
+  # Logs retention
+  logs:
+    application_logs: "30d"
+    error_logs: "90d"
+    audit_logs: "365d"
+    debug_logs: "7d"
+  
+  # Traces retention
+  traces:
+    detailed_traces: "7d"
+    sampled_traces: "30d"
+  
+  # Health check data
+  health_data:
+    detailed_history: "7d"
+    summary_history: "90d"
+
+# =============================================================================
+# Export and Backup
+# =============================================================================
+backup:
+  # Metrics backup
+  metrics:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention: "90d"
+    destination: "s3://monitoring-backups/metrics/"
+  
+  # Configuration backup
+  configs:
+    enabled: true
+    schedule: "0 3 * * SUN"  # Weekly on Sunday at 3 AM
+    retention: "365d"
+    destination: "s3://monitoring-backups/configs/"
+  
+  # Dashboard backup
+  dashboards:
+    enabled: true
+    schedule: "0 4 * * *"  # Daily at 4 AM
+    retention: "30d"
+    destination: "s3://monitoring-backups/dashboards/"

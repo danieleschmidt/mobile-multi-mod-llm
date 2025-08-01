@@ -1,0 +1,396 @@
+# Health Check Configuration for Mobile Multi-Modal LLM
+# Comprehensive health monitoring and dependency validation
+
+# =============================================================================
+# Application Health Checks
+# =============================================================================
+application_health:
+  # Core service health
+  service_health:
+    endpoint: "/health"
+    method: "GET"
+    timeout_seconds: 5
+    interval_seconds: 30
+    failure_threshold: 3
+    success_threshold: 1
+    expected_status: 200
+    expected_body_contains: "healthy"
+    
+  # Readiness probe (service ready to accept traffic)
+  readiness:
+    endpoint: "/ready"
+    method: "GET"
+    timeout_seconds: 10
+    interval_seconds: 15
+    failure_threshold: 3
+    success_threshold: 1
+    expected_status: 200
+    checks:
+      - name: "model_loaded"
+        description: "Primary model is loaded and ready"
+      - name: "dependencies_available"
+        description: "All required dependencies are accessible"
+      - name: "memory_sufficient"
+        description: "Available memory above threshold"
+
+  # Liveness probe (service is alive and functioning)
+  liveness:
+    endpoint: "/alive"
+    method: "GET"
+    timeout_seconds: 3
+    interval_seconds: 10
+    failure_threshold: 5
+    success_threshold: 1
+    expected_status: 200
+    checks:
+      - name: "process_responsive"
+        description: "Main process is responsive"
+      - name: "no_deadlocks"
+        description: "No thread deadlocks detected"
+
+# =============================================================================
+# Model-Specific Health Checks
+# =============================================================================
+model_health:
+  # Model inference health
+  inference_health:
+    endpoint: "/model/health"
+    method: "POST"
+    timeout_seconds: 15
+    interval_seconds: 60
+    failure_threshold: 2
+    success_threshold: 1
+    payload:
+      image: "test_image_b64"
+      task: "captioning"
+    expected_status: 200
+    expected_response:
+      accuracy_threshold: 0.85
+      latency_threshold_ms: 50
+      memory_usage_threshold_mb: 200
+
+  # Quantization validation
+  quantization_health:
+    endpoint: "/model/quantization/validate"
+    method: "GET"
+    timeout_seconds: 30
+    interval_seconds: 300  # 5 minutes
+    failure_threshold: 1
+    success_threshold: 1
+    expected_status: 200
+    checks:
+      - name: "int2_model_available"
+        description: "INT2 quantized model is loaded"
+      - name: "accuracy_within_threshold"
+        description: "Quantized model accuracy loss < 5%"
+      - name: "size_within_target"
+        description: "Model size < 35MB"
+
+# =============================================================================
+# Infrastructure Health Checks
+# =============================================================================
+infrastructure_health:
+  # Database connectivity
+  database:
+    type: "postgresql"
+    host: "postgres"
+    port: 5432
+    database: "mobile_multimodal"
+    username: "mmllm"
+    timeout_seconds: 10
+    interval_seconds: 30
+    failure_threshold: 3
+    success_threshold: 1
+    queries:
+      - name: "connection_test"
+        query: "SELECT 1"
+        expected_result: 1
+      - name: "table_existence"
+        query: "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"
+        min_result: 0
+
+  # Redis connectivity  
+  redis:
+    type: "redis"
+    host: "redis"
+    port: 6379
+    password: "redis_password_123"
+    timeout_seconds: 5
+    interval_seconds: 30
+    failure_threshold: 3
+    success_threshold: 1
+    commands:
+      - name: "ping_test"
+        command: "PING"
+        expected_response: "PONG"
+      - name: "memory_check"
+        command: "INFO memory"
+        check_contains: "used_memory_human"
+
+  # File system health
+  filesystem:
+    checks:
+      - name: "root_disk_space"
+        path: "/"
+        min_free_percent: 20
+        min_free_bytes: 1073741824  # 1GB
+        interval_seconds: 60
+        failure_threshold: 2
+      - name: "models_directory"
+        path: "/app/models"
+        min_free_percent: 10
+        min_free_bytes: 536870912   # 512MB
+        interval_seconds: 60
+        failure_threshold: 2
+      - name: "logs_directory"
+        path: "/app/logs"
+        min_free_percent: 5
+        min_free_bytes: 268435456   # 256MB
+        interval_seconds: 300
+        failure_threshold: 1
+
+# =============================================================================
+# Mobile Platform Health Checks
+# =============================================================================
+mobile_health:
+  # Android model export health
+  android_export:
+    endpoint: "/mobile/android/health"
+    method: "GET"
+    timeout_seconds: 20
+    interval_seconds: 300  # 5 minutes
+    failure_threshold: 2
+    success_threshold: 1
+    expected_status: 200
+    checks:
+      - name: "tflite_model_valid"
+        description: "TensorFlow Lite model is valid and loadable"
+      - name: "hexagon_delegate_available"
+        description: "Hexagon NPU delegate is available"
+      - name: "inference_test_passes"
+        description: "Sample inference test passes"
+
+  # iOS model export health
+  ios_export:
+    endpoint: "/mobile/ios/health"
+    method: "GET"
+    timeout_seconds: 20
+    interval_seconds: 300  # 5 minutes
+    failure_threshold: 2
+    success_threshold: 1
+    expected_status: 200
+    checks:
+      - name: "coreml_model_valid"
+        description: "Core ML model is valid and loadable"
+      - name: "neural_engine_compatible"
+        description: "Model is compatible with Neural Engine"
+      - name: "inference_test_passes"
+        description: "Sample inference test passes"
+
+# =============================================================================
+# Security Health Checks
+# =============================================================================
+security_health:
+  # Authentication health
+  authentication:
+    endpoint: "/auth/health"
+    method: "GET"
+    timeout_seconds: 5
+    interval_seconds: 60
+    failure_threshold: 3
+    success_threshold: 1
+    expected_status: 200
+    checks:
+      - name: "token_validation_working"
+        description: "JWT token validation is functioning"
+      - name: "rate_limiting_active"
+        description: "Rate limiting is properly configured"
+
+  # Input validation health
+  input_validation:
+    endpoint: "/security/validation/health"
+    method: "POST"
+    timeout_seconds: 10
+    interval_seconds: 120
+    failure_threshold: 2
+    success_threshold: 1
+    payload:
+      test_cases:
+        - type: "malformed_image"
+        - type: "oversized_input"
+        - type: "malicious_text"
+    expected_status: 200
+    checks:
+      - name: "input_sanitization_active"
+        description: "Input sanitization is working"
+      - name: "security_headers_present"
+        description: "Security headers are properly set"
+
+# =============================================================================
+# Performance Health Checks
+# =============================================================================
+performance_health:
+  # Memory usage monitoring
+  memory:
+    checks:
+      - name: "memory_usage_within_limits"
+        max_usage_percent: 80
+        max_usage_bytes: 2147483648  # 2GB
+        interval_seconds: 30
+        failure_threshold: 5
+      - name: "memory_leak_detection"
+        growth_rate_threshold_mb_per_hour: 10
+        monitoring_window_hours: 1
+        interval_seconds: 300
+        failure_threshold: 3
+
+  # CPU usage monitoring
+  cpu:
+    checks:
+      - name: "cpu_usage_within_limits"
+        max_usage_percent: 85
+        interval_seconds: 30
+        failure_threshold: 5
+      - name: "cpu_throttling_detection"
+        throttling_threshold_percent: 10
+        interval_seconds: 60
+        failure_threshold: 3
+
+  # Response time monitoring
+  response_time:
+    endpoints:
+      - path: "/model/inference"
+        method: "POST"
+        max_response_time_ms: 100
+        p95_threshold_ms: 50
+        interval_seconds: 30
+        failure_threshold: 3
+      - path: "/health"
+        method: "GET"
+        max_response_time_ms: 1000
+        p95_threshold_ms: 500
+        interval_seconds: 15
+        failure_threshold: 5
+
+# =============================================================================
+# Custom Health Check Scripts
+# =============================================================================
+custom_scripts:
+  # Model accuracy validation
+  model_accuracy_check:
+    script: "/app/scripts/health/check_model_accuracy.py"
+    interval_seconds: 3600  # 1 hour
+    timeout_seconds: 300
+    failure_threshold: 1
+    success_threshold: 1
+    parameters:
+      test_dataset: "validation_set.json"
+      accuracy_threshold: 0.85
+      sample_size: 100
+
+  # Quantization drift detection
+  quantization_drift_check:
+    script: "/app/scripts/health/check_quantization_drift.py"
+    interval_seconds: 7200  # 2 hours
+    timeout_seconds: 600
+    failure_threshold: 1
+    success_threshold: 1
+    parameters:
+      original_model: "models/base_model.pth"
+      quantized_model: "models/quantized_int2.tflite"
+      drift_threshold: 0.05
+
+  # Mobile export validation
+  mobile_export_check:
+    script: "/app/scripts/health/validate_mobile_exports.py"
+    interval_seconds: 1800  # 30 minutes
+    timeout_seconds: 300
+    failure_threshold: 2
+    success_threshold: 1
+    parameters:
+      android_model: "models/android/model.tflite"
+      ios_model: "models/ios/model.mlpackage"
+      test_samples: 10
+
+# =============================================================================
+# Alert Configuration
+# =============================================================================
+alerting:
+  # Health check failure notifications
+  notification_channels:
+    - name: "slack_alerts"
+      type: "slack"
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+      channel: "#mobile-ml-alerts"
+      severity_levels: ["critical", "warning"]
+    
+    - name: "pagerduty_critical"
+      type: "pagerduty"
+      integration_key: "${PAGERDUTY_INTEGRATION_KEY}"
+      severity_levels: ["critical"]
+    
+    - name: "email_alerts"
+      type: "email"
+      recipients: ["ml-team@company.com", "devops@company.com"]
+      severity_levels: ["critical", "warning"]
+
+  # Escalation policies
+  escalation:
+    - condition: "health_check_failure"
+      initial_notification: "slack_alerts"
+      escalation_time_minutes: 15
+      escalated_notification: "pagerduty_critical"
+    
+    - condition: "model_accuracy_drop"
+      initial_notification: "slack_alerts"
+      escalation_time_minutes: 30
+      escalated_notification: "email_alerts"
+
+# =============================================================================
+# Maintenance Windows
+# =============================================================================
+maintenance:
+  # Scheduled maintenance windows (suppress alerts)
+  windows:
+    - name: "weekly_maintenance"
+      schedule: "0 2 * * SUN"  # Every Sunday at 2 AM
+      duration_minutes: 120
+      affected_checks: ["model_accuracy_check", "quantization_drift_check"]
+    
+    - name: "model_update_window"
+      schedule: "0 3 1 * *"    # First day of month at 3 AM
+      duration_minutes: 240
+      affected_checks: ["all"]
+
+# =============================================================================
+# Reporting and Dashboards
+# =============================================================================
+reporting:
+  # Health check status dashboard
+  dashboard_config:
+    title: "Mobile Multi-Modal LLM - Health Status"
+    refresh_interval_seconds: 30
+    panels:
+      - name: "overall_health"
+        type: "status_panel"
+        checks: ["application_health", "model_health", "infrastructure_health"]
+      - name: "performance_metrics"
+        type: "time_series"
+        checks: ["memory", "cpu", "response_time"]
+      - name: "mobile_status"
+        type: "status_grid"
+        checks: ["android_export", "ios_export"]
+
+  # Health report generation
+  reports:
+    - name: "daily_health_summary"
+      schedule: "0 9 * * *"  # Daily at 9 AM
+      format: "pdf"
+      recipients: ["ml-team@company.com"]
+      sections: ["overall_status", "performance_trends", "failures_summary"]
+    
+    - name: "weekly_detailed_report"
+      schedule: "0 10 * * MON"  # Monday at 10 AM
+      format: "html"
+      recipients: ["management@company.com"]
+      sections: ["comprehensive_analysis", "sla_metrics", "improvement_recommendations"]

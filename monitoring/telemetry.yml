@@ -1,0 +1,526 @@
+# OpenTelemetry Configuration for Mobile Multi-Modal LLM
+# Comprehensive telemetry setup for metrics, logs, and traces
+
+# =============================================================================
+# OpenTelemetry Collector Configuration
+# =============================================================================
+receivers:
+  # OTLP receiver for application telemetry
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - http://localhost:3000
+            - http://localhost:8080
+  
+  # Prometheus scraping receiver
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'mobile-multimodal-app'
+          static_configs:
+            - targets: ['app-prod:8080']
+          scrape_interval: 15s
+          metrics_path: '/metrics'
+          
+        - job_name: 'mobile-export-service'
+          static_configs:
+            - targets: ['mobile-dev:8081']
+          scrape_interval: 30s
+          metrics_path: '/export/metrics'
+          
+        - job_name: 'node-exporter'
+          static_configs:
+            - targets: ['node-exporter:9100']
+          scrape_interval: 15s
+  
+  # Host metrics receiver
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      disk:
+        metrics:
+          system.disk.io:
+            enabled: true
+          system.disk.operations:
+            enabled: true
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      network:
+        metrics:
+          system.network.io:
+            enabled: true
+      process:
+        metrics:
+          process.cpu.utilization:
+            enabled: true
+          process.memory.utilization:
+            enabled: true
+  
+  # Docker stats receiver
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 30s
+    timeout: 20s
+    api_version: 1.40
+
+# =============================================================================
+# Processors
+# =============================================================================
+processors:
+  # Batch processor for performance
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+  
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    limit_mib: 512
+    spike_limit_mib: 128
+    check_interval: 5s
+  
+  # Resource processor to add common attributes
+  resource:
+    attributes:
+      - key: service.name
+        value: mobile-multimodal-llm
+        action: upsert
+      - key: service.version
+        from_attribute: version
+        action: upsert
+      - key: deployment.environment
+        from_attribute: environment
+        action: upsert
+      - key: k8s.cluster.name
+        value: mobile-ml-cluster
+        action: upsert
+  
+  # Probabilistic sampling for traces
+  probabilistic_sampler:
+    sampling_percentage: 1.0  # Sample 1% of traces
+  
+  # Attribute processor for sensitive data
+  attributes:
+    actions:
+      - key: user.id
+        action: hash  # Hash PII data
+      - key: api.key
+        action: delete  # Remove sensitive keys
+      - key: model.path
+        action: update
+        from_attribute: model.sanitized_path
+  
+  # Span processor for mobile-specific attributes
+  span:
+    name:
+      from_attributes: ["operation.name", "mobile.platform"]
+      separator: "_"
+    include:
+      match_type: regexp
+      services: ["mobile-.*"]
+    exclude:
+      match_type: strict
+      span_names: ["health_check", "metrics_collection"]
+
+# =============================================================================
+# Exporters
+# =============================================================================
+exporters:
+  # Prometheus exporter
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    const_labels:
+      service: mobile-multimodal-llm
+    namespace: mobile_ml
+    send_timestamps: true
+    metric_expiration: 180m
+    enable_open_metrics: true
+  
+  # Jaeger exporter for traces
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+  
+  # OTLP exporter for external systems
+  otlp:
+    endpoint: "http://otlp-collector:4317"
+    tls:
+      insecure: true
+    headers:
+      api-key: "${OTLP_API_KEY}"
+  
+  # Loki exporter for logs
+  loki:
+    endpoint: "http://loki:3100/loki/api/v1/push"
+    tenant_id: "mobile-ml"
+    labels:
+      attributes:
+        service.name: "service"
+        log.level: "level"
+        environment: "env"
+  
+  # File exporter for debugging
+  file:
+    path: "/tmp/otel-output.json"
+    rotation:
+      max_megabytes: 100
+      max_days: 7
+      max_backups: 3
+  
+  # Cloud vendor exporters (conditional)
+  datadog:
+    api:
+      key: "${DATADOG_API_KEY}"
+      site: "datadoghq.com"
+    metrics:
+      endpoint: "https://api.datadoghq.com"
+    traces:
+      endpoint: "https://trace.agent.datadoghq.com"
+  
+  awsxray:
+    region: "${AWS_REGION}"
+    no_verify_ssl: false
+  
+  # Google Cloud exporter
+  googlecloud:
+    project: "${GCP_PROJECT_ID}"
+    metric:
+      endpoint: "https://monitoring.googleapis.com/"
+    trace:
+      endpoint: "https://cloudtrace.googleapis.com/"
+
+# =============================================================================
+# Extensions
+# =============================================================================
+extensions:
+  # Health check extension
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: "/health"
+  
+  # pprof extension for debugging
+  pprof:
+    endpoint: 0.0.0.0:1777
+  
+  # zpages extension for internal telemetry
+  zpages:
+    endpoint: 0.0.0.0:55679
+  
+  # Memory ballast for stable memory usage
+  memory_ballast:
+    size_mib: 256
+
+# =============================================================================
+# Service Configuration
+# =============================================================================
+service:
+  extensions: [health_check, pprof, zpages, memory_ballast]
+  
+  pipelines:
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp, prometheus, hostmetrics, docker_stats]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheus, otlp, datadog]
+    
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, probabilistic_sampler, attributes, span, batch]
+      exporters: [jaeger, otlp, awsxray]
+    
+    # Logs pipeline
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes, batch]
+      exporters: [loki, otlp, file]
+    
+    # Debug pipeline for development
+    metrics/debug:
+      receivers: [otlp]
+      processors: [memory_limiter, resource]
+      exporters: [file]
+  
+  # Telemetry configuration
+  telemetry:
+    logs:
+      level: "info"
+      development: false
+      sampling:
+        enabled: true
+        tick: 10s
+        initial: 5
+        thereafter: 200
+      encoding: "json"
+      output_paths: ["stdout", "/tmp/otel-collector.log"]
+      error_output_paths: ["stderr"]
+    
+    metrics:
+      level: "detailed"
+      address: "0.0.0.0:8888"
+    
+    traces:
+      processors: ["batch"]
+
+# =============================================================================
+# Mobile-Specific Configuration
+# =============================================================================
+mobile_telemetry:
+  # Android telemetry
+  android:
+    enabled: true
+    exporters:
+      - name: "local_otlp"
+        endpoint: "http://localhost:4318"
+        timeout: "10s"
+        compression: "gzip"
+    
+    sampling:
+      traces: 0.1  # 10% sampling for Android
+      metrics: 1.0  # All metrics
+    
+    resource_attributes:
+      - key: "mobile.platform"
+        value: "android"
+      - key: "mobile.sdk.version"
+        value: "1.0.0"
+      - key: "device.model"
+        from_system: true
+      - key: "os.version"
+        from_system: true
+  
+  # iOS telemetry
+  ios:
+    enabled: true
+    exporters:
+      - name: "local_otlp"
+        endpoint: "http://localhost:4318"
+        timeout: "10s"
+        compression: "gzip"
+    
+    sampling:
+      traces: 0.1  # 10% sampling for iOS
+      metrics: 1.0  # All metrics
+    
+    resource_attributes:
+      - key: "mobile.platform"
+        value: "ios"
+      - key: "mobile.sdk.version"
+        value: "1.0.0"
+      - key: "device.model"
+        from_system: true
+      - key: "os.version"
+        from_system: true
+  
+  # Cross-platform metrics
+  common_metrics:
+    - name: "mobile.model.inference.duration"
+      type: "histogram"
+      unit: "ms"
+      description: "Mobile model inference duration"
+    
+    - name: "mobile.model.size"
+      type: "gauge"
+      unit: "bytes"
+      description: "Mobile model size"
+    
+    - name: "mobile.memory.usage"
+      type: "gauge"
+      unit: "bytes"
+      description: "Mobile memory usage"
+    
+    - name: "mobile.battery.level"
+      type: "gauge"
+      unit: "percent"
+      description: "Device battery level"
+    
+    - name: "mobile.thermal.state"
+      type: "gauge"
+      unit: "enum"
+      description: "Device thermal state"
+
+# =============================================================================
+# Performance Monitoring Configuration
+# =============================================================================
+performance_monitoring:
+  # APM configuration
+  apm:
+    enabled: true
+    service_name: "mobile-multimodal-llm"
+    environment: "${ENVIRONMENT}"
+    
+    # Transaction sampling
+    transaction_sample_rate: 0.1
+    
+    # Error sampling
+    error_sample_rate: 1.0
+    
+    # Span compression
+    span_compression:
+      enabled: true
+      exact_match_max_duration: "5ms"
+      same_kind_max_duration: "10ms"
+    
+    # Profiling
+    profiling:
+      enabled: true
+      cpu_profile_frequency: "20ms"
+      heap_profile_interval: "1m"
+  
+  # Custom instrumentation
+  instrumentation:
+    # Model operations
+    model:
+      enabled: true
+      capture_parameters: false  # Don't capture model weights
+      capture_return_values: false
+      capture_locals: false
+    
+    # Database operations
+    database:
+      enabled: true
+      capture_statement: true
+      capture_statement_max_length: 1000
+    
+    # HTTP requests
+    http:
+      enabled: true
+      capture_headers: ["user-agent", "content-type"]
+      capture_body: false
+    
+    # Mobile export operations
+    mobile_export:
+      enabled: true
+      capture_export_size: true
+      capture_platform_info: true
+
+# =============================================================================
+# Security and Privacy Configuration
+# =============================================================================
+security:
+  # Data sanitization
+  data_sanitization:
+    enabled: true
+    rules:
+      - pattern: "user_id"
+        action: "hash"
+        algorithm: "sha256"
+      - pattern: "api_key"
+        action: "redact"
+      - pattern: "password"
+        action: "redact"
+      - pattern: "token"
+        action: "redact"
+      - pattern: "secret"
+        action: "redact"
+  
+  # TLS configuration
+  tls:
+    enabled: true
+    cert_file: "/etc/ssl/certs/otel-collector.crt"
+    key_file: "/etc/ssl/private/otel-collector.key"
+    ca_file: "/etc/ssl/certs/ca.crt"
+    min_version: "1.2"
+    max_version: "1.3"
+  
+  # Authentication
+  authentication:
+    enabled: true
+    methods:
+      - type: "bearer_token"
+        token: "${OTEL_AUTH_TOKEN}"
+      - type: "api_key"
+        header: "X-API-Key"
+        key: "${OTEL_API_KEY}"
+  
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_second: 1000
+    burst_size: 2000
+    
+    # Per-client limits
+    per_client:
+      enabled: true
+      requests_per_second: 100
+      burst_size: 200
+
+# =============================================================================
+# Storage and Retention Configuration
+# =============================================================================
+storage:
+  # Local storage configuration
+  local:
+    enabled: true
+    path: "/var/lib/otel-collector"
+    max_size: "10GB"
+    retention: "7d"
+  
+  # Remote storage backends
+  remote:
+    # S3 backend
+    s3:
+      enabled: false
+      bucket: "mobile-ml-telemetry"
+      region: "${AWS_REGION}"
+      prefix: "otel-data"
+      retention: "30d"
+    
+    # Google Cloud Storage
+    gcs:
+      enabled: false
+      bucket: "mobile-ml-telemetry"
+      prefix: "otel-data"
+      retention: "30d"
+  
+  # Compression
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 6
+
+# =============================================================================
+# Debugging and Development Configuration
+# =============================================================================
+debug:
+  # Enable debug mode
+  enabled: false
+  
+  # Debug exporters
+  exporters:
+    console:
+      enabled: true
+      detailed: true
+    
+    file:
+      enabled: true
+      path: "/tmp/debug-telemetry.json"
+      pretty_print: true
+  
+  # Trace debugging
+  traces:
+    print_traces: false
+    validate_traces: true
+    trace_buffer_size: 1000
+  
+  # Metrics debugging
+  metrics:
+    print_metrics: false
+    validate_metrics: true
+    metrics_buffer_size: 10000

@@ -335,7 +335,20 @@ MIT License - Free for academic and commercial use.
 
 ## 🔗 Resources
 
-- [Documentation](https://mobile-multi-mod-llm.readthedocs.io)
+### Documentation
+- [📖 Full Documentation](https://mobile-multi-mod-llm.readthedocs.io)
+- [🏗️ Architecture Overview](ARCHITECTURE.md)
+- [📋 Project Charter](PROJECT_CHARTER.md)
+- [🗺️ Development Roadmap](docs/ROADMAP.md)
+- [⚖️ Architecture Decisions](ARCHITECTURE_DECISION_RECORD.md)
+
+### Development
+- [🤝 Contributing Guidelines](CONTRIBUTING.md)
+- [🔒 Security Policy](SECURITY.md)
+- [📚 Developer Guides](docs/)
+- [🏃‍♂️ Runbooks](docs/runbooks/)
+
+### Community
 - [Model Zoo](https://huggingface.co/mobile-mm-llm)
 - [Benchmarking Suite](https://github.com/yourusername/mobile-ai-bench)
 - [Community Forum](https://discuss.mobile-mm-llm.org)

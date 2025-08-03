@@ -132,6 +132,50 @@ Implement continuous performance monitoring with automated regression detection.
 
 ---
 
+## ADR-007: PyTorch Mobile and ONNX Runtime Integration
+
+**Date**: 2025-08-03  
+**Status**: Accepted  
+**Context**: Need unified model deployment across mobile platforms with optimized inference runtimes
+
+### Decision
+Implement dual deployment strategy: PyTorch Mobile for development/testing and ONNX Runtime Mobile for production with platform-specific optimizations.
+
+### Rationale
+- **PyTorch Mobile**: Seamless development-to-deployment pipeline
+- **ONNX Runtime**: Superior production performance with hardware acceleration
+- **Flexibility**: Support multiple deployment scenarios
+- **Optimization**: Platform-specific graph optimizations
+
+### Consequences
+- **Positive**: Best of both worlds - development ease and production performance
+- **Negative**: Dual maintenance overhead, conversion complexity
+- **Mitigation**: Automated conversion pipeline, comprehensive testing
+
+---
+
+## ADR-008: Unified Vision-Text Tokenization Strategy
+
+**Date**: 2025-08-03  
+**Status**: Accepted  
+**Context**: Need efficient tokenization for multi-modal inputs with minimal vocabulary size
+
+### Decision
+Implement shared BPE tokenizer with vision patch embeddings mapped to text token space.
+
+### Rationale
+- **Efficiency**: Single tokenizer reduces model complexity
+- **Unified Processing**: Seamless vision-text fusion
+- **Vocabulary**: Optimized for mobile constraints
+- **Performance**: Reduced embedding layer size
+
+### Consequences
+- **Positive**: Simplified architecture, efficient memory usage
+- **Negative**: Potential vision-text interference, complex training
+- **Mitigation**: Careful token space design, balanced training
+
+---
+
 ## Decision Process
 
 ### Proposal Template

@@ -1,5 +1,8 @@
+# EditorConfig configuration for Mobile Multi-Modal LLM project
+
 root = true
 
+# All files
 [*]
 charset = utf-8
 end_of_line = lf
@@ -8,18 +11,56 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 
+# Python files
 [*.py]
 indent_size = 4
 max_line_length = 88
 
+# YAML files
 [*.{yml,yaml}]
 indent_size = 2
 
+# JSON files
+[*.json]
+indent_size = 2
+
+# JavaScript/TypeScript files
 [*.{js,ts,jsx,tsx}]
 indent_size = 2
 
-[*.{json,md}]
+# HTML/CSS files
+[*.{html,css,scss}]
 indent_size = 2
 
+# Swift files
+[*.swift]
+indent_size = 4
+
+# Kotlin files
+[*.kt]
+indent_size = 4
+
+# Java files
+[*.java]
+indent_size = 4
+
+# C/C++ files
+[*.{c,cpp,h,hpp}]
+indent_size = 2
+
+# Shell scripts
+[*.sh]
+indent_size = 2
+
+# Makefiles
 [Makefile]
 indent_style = tab
+
+# Docker files
+[Dockerfile*]
+indent_size = 2
+
+# Markdown files
+[*.md]
+indent_size = 2
+trim_trailing_whitespace = false

@@ -323,7 +323,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 ```bibtex
 @inproceedings{mobile_multimodal_2025,
   title={Sub-35MB Multimodal Transformers for Mobile Devices via INT2 Quantization},
-  author={Your Name et al.},
+  author={Daniel Schmidt},
   booktitle={MobileAI Workshop, CVPR},
   year={2025}
 }

@@ -12,12 +12,10 @@ try:
     import torch
     import torch.nn as nn
     import torch.quantization as quant
-    TORCH_AVAILABLE = True
 except ImportError:
     torch = None
     nn = None
     quant = None
-    TORCH_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +30,7 @@ class INT2Quantizer:
         
     def calibrate(self, model: Any, dataloader) -> Dict[str, Any]:
         """Calibrate quantization parameters using sample data."""
-        if not TORCH_AVAILABLE:
+        if torch is None:
             raise ImportError("PyTorch is required for quantization")
             
         model.eval()
@@ -45,7 +43,7 @@ class INT2Quantizer:
         
         def collect_stats(name):
             def hook_fn(module, input, output):
-                if TORCH_AVAILABLE and hasattr(torch, 'Tensor') and isinstance(output, torch.Tensor):
+                if isinstance(output, torch.Tensor):
                     if name not in activation_stats:
                         activation_stats[name] = []
                     
@@ -60,25 +58,24 @@ class INT2Quantizer:
         
         # Register hooks
         for name, module in model.named_modules():
-            if nn is not None and isinstance(module, (nn.Linear, nn.Conv2d)):
+            if isinstance(module, (nn.Linear, nn.Conv2d)):
                 hook = module.register_forward_hook(collect_stats(name))
                 hooks.append(hook)
         
         # Run calibration samples
         sample_count = 0
-        if TORCH_AVAILABLE:
-            with torch.no_grad():
-                for batch in dataloader:
-                    if isinstance(batch, (list, tuple)):
-                        inputs = batch[0]
-                    else:
-                        inputs = batch
-                        
-                    _ = model(inputs)
-                    sample_count += inputs.size(0)
+        with torch.no_grad():
+            for batch in dataloader:
+                if isinstance(batch, (list, tuple)):
+                    inputs = batch[0]
+                else:
+                    inputs = batch
                     
-                    if sample_count >= self.calibration_samples:
-                        break
+                _ = model(inputs)
+                sample_count += inputs.size(0)
+                
+                if sample_count >= self.calibration_samples:
+                    break
         
         # Remove hooks
         for hook in hooks:
@@ -111,11 +108,8 @@ class INT2Quantizer:
         logger.info(f"Calibration complete. Found parameters for {len(quant_params)} layers")
         return quant_params
     
-    def quantize_weights_int2(self, weights: Any) -> Tuple[Any, float, int]:
+    def quantize_weights_int2(self, weights: torch.Tensor) -> Tuple[torch.Tensor, float, int]:
         """Quantize weights to INT2 format."""
-        if not TORCH_AVAILABLE:
-            raise ImportError("PyTorch is required for weight quantization")
-        
         # Calculate scale and zero point for symmetric quantization
         max_val = torch.max(torch.abs(weights))
         scale = max_val / 2.0  # INT2 range: -2 to 1
@@ -126,12 +120,9 @@ class INT2Quantizer:
         
         return quantized.to(torch.int8), scale.item(), zero_point
     
-    def dequantize_weights_int2(self, quantized_weights: Any, 
-                               scale: float, zero_point: int) -> Any:
+    def dequantize_weights_int2(self, quantized_weights: torch.Tensor, 
+                               scale: float, zero_point: int) -> torch.Tensor:
         """Dequantize INT2 weights back to float."""
-        if not TORCH_AVAILABLE:
-            raise ImportError("PyTorch is required for weight dequantization")
-        
         return scale * (quantized_weights.float() - zero_point)
     
     def apply_int2_quantization(self, model: Any) -> Any:
@@ -140,14 +131,12 @@ class INT2Quantizer:
         return quantized_model
 
 
-class INT2QuantizedModel:
+class INT2QuantizedModel(nn.Module):
     """Model wrapper with INT2 quantized weights."""
     
-    def __init__(self, original_model: Any, scale_factors: Dict[str, float], 
+    def __init__(self, original_model: nn.Module, scale_factors: Dict[str, float], 
                  zero_points: Dict[str, int]):
-        if not TORCH_AVAILABLE:
-            raise ImportError("PyTorch is required for quantized models")
-            
+        super().__init__()
         self.original_model = original_model
         self.scale_factors = scale_factors
         self.zero_points = zero_points
@@ -161,7 +150,7 @@ class INT2QuantizedModel:
         quantizer = INT2Quantizer()
         
         for name, module in self.original_model.named_modules():
-            if nn is not None and isinstance(module, (nn.Linear, nn.Conv2d)) and hasattr(module, 'weight'):
+            if isinstance(module, (nn.Linear, nn.Conv2d)) and hasattr(module, 'weight'):
                 quantized_weight, scale, zero_point = quantizer.quantize_weights_int2(module.weight)
                 
                 self.quantized_weights[name] = {
@@ -174,29 +163,43 @@ class INT2QuantizedModel:
                 if hasattr(module, 'bias') and module.bias is not None:
                     self.quantized_weights[name]['bias'] = module.bias
     
-    def forward(self, x: Any) -> Any:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass with quantized weights."""
-        if not TORCH_AVAILABLE:
-            raise ImportError("PyTorch is required for forward pass")
-        
         # For demonstration, this would need custom kernels for true INT2 computation
         # Here we simulate by dequantizing weights during forward pass
         return self._simulate_quantized_forward(x)
     
-    def _simulate_quantized_forward(self, x: Any) -> Any:
+    def _simulate_quantized_forward(self, x: torch.Tensor) -> torch.Tensor:
         """Simulate quantized forward pass by dequantizing weights."""
-        if not TORCH_AVAILABLE:
-            raise ImportError("PyTorch is required for simulated forward pass")
-        
         # This is a simplified simulation - real deployment would use
         # optimized INT2 kernels on Hexagon NPU
         
         quantizer = INT2Quantizer()
         current_x = x
         
-        # Note: This is a very simplified implementation
-        # Real implementation would need proper module execution
-        logger.warning("Simulated quantized forward pass - not for production use")
+        for name, module in self.original_model.named_modules():
+            if isinstance(module, (nn.Linear, nn.Conv2d)) and name in self.quantized_weights:
+                quant_data = self.quantized_weights[name]
+                
+                # Dequantize weights for simulation
+                dequant_weight = quantizer.dequantize_weights_int2(
+                    quant_data['weight'], 
+                    quant_data['scale'], 
+                    quant_data['zero_point']
+                )
+                
+                # Apply operation with dequantized weights
+                if isinstance(module, nn.Linear):
+                    current_x = F.linear(current_x, dequant_weight, quant_data.get('bias'))
+                elif isinstance(module, nn.Conv2d):
+                    current_x = F.conv2d(
+                        current_x, dequant_weight, quant_data.get('bias'),
+                        module.stride, module.padding, module.dilation, module.groups
+                    )
+            elif hasattr(module, 'forward') and len(list(module.children())) == 0:
+                # Apply non-quantized modules normally
+                current_x = module(current_x)
+        
         return current_x
     
     def get_model_size(self) -> Dict[str, float]:
@@ -205,19 +208,17 @@ class INT2QuantizedModel:
         quantized_params = 0
         
         for name, data in self.quantized_weights.items():
-            if TORCH_AVAILABLE:
-                weight_params = data['weight'].numel()
-                total_params += weight_params
-                quantized_params += weight_params
-                
-                if 'bias' in data:
-                    total_params += data['bias'].numel()
+            weight_params = data['weight'].numel()
+            total_params += weight_params
+            quantized_params += weight_params
+            
+            if 'bias' in data:
+                total_params += data['bias'].numel()
         
         # Add non-quantized parameters
         for name, param in self.original_model.named_parameters():
             if not any(name.startswith(qname) for qname in self.quantized_weights.keys()):
-                if TORCH_AVAILABLE:
-                    total_params += param.numel()
+                total_params += param.numel()
         
         # Calculate sizes in MB
         original_size = total_params * 4 / (1024 * 1024)  # FP32
@@ -226,8 +227,8 @@ class INT2QuantizedModel:
         return {
             'original_size_mb': original_size,
             'quantized_size_mb': quantized_size,
-            'compression_ratio': original_size / quantized_size if quantized_size > 0 else 0,
-            'size_reduction_percent': (1 - quantized_size / original_size) * 100 if original_size > 0 else 0
+            'compression_ratio': original_size / quantized_size,
+            'size_reduction_percent': (1 - quantized_size / original_size) * 100
         }
 
 
@@ -239,7 +240,7 @@ class HexagonOptimizer:
             'int2_matmul', 'int2_conv2d', 'int8_pool', 'fp16_activation'
         }
     
-    def optimize_for_hexagon(self, model: Any) -> Dict[str, Any]:
+    def optimize_for_hexagon(self, model: nn.Module) -> Dict[str, Any]:
         """Optimize model for Hexagon NPU execution."""
         optimization_report = {
             'optimized_layers': [],
@@ -247,12 +248,8 @@ class HexagonOptimizer:
             'performance_estimate': {}
         }
         
-        if not TORCH_AVAILABLE or not hasattr(model, 'named_modules'):
-            optimization_report['error'] = "PyTorch model required"
-            return optimization_report
-        
         for name, module in model.named_modules():
-            if nn is not None and isinstance(module, nn.Linear):
+            if isinstance(module, nn.Linear):
                 # Linear layers can use INT2 matmul
                 optimization_report['optimized_layers'].append({
                     'name': name,
@@ -260,7 +257,7 @@ class HexagonOptimizer:
                     'optimization': 'INT2_MATMUL',
                     'expected_speedup': 4.0
                 })
-            elif nn is not None and isinstance(module, nn.Conv2d):
+            elif isinstance(module, nn.Conv2d):
                 # Conv2D layers can use INT2 convolution
                 optimization_report['optimized_layers'].append({
                     'name': name,
@@ -268,7 +265,7 @@ class HexagonOptimizer:
                     'optimization': 'INT2_CONV2D',
                     'expected_speedup': 3.5
                 })
-            elif nn is not None and isinstance(module, (nn.ReLU, nn.GELU, nn.Sigmoid)):
+            elif isinstance(module, (nn.ReLU, nn.GELU, nn.Sigmoid)):
                 # Activations run on vector units
                 optimization_report['optimized_layers'].append({
                     'name': name,
@@ -285,22 +282,19 @@ class HexagonOptimizer:
                 })
         
         # Estimate overall performance
-        if optimization_report['optimized_layers']:
-            total_speedup = np.mean([layer.get('expected_speedup', 1.0) 
-                                   for layer in optimization_report['optimized_layers']])
-        else:
-            total_speedup = 1.0
+        total_speedup = np.mean([layer.get('expected_speedup', 1.0) 
+                               for layer in optimization_report['optimized_layers']])
         
         optimization_report['performance_estimate'] = {
             'overall_speedup': total_speedup,
             'optimized_ops_ratio': len(optimization_report['optimized_layers']) / 
-                                 max(len(optimization_report['optimized_layers']) + len(optimization_report['unsupported_ops']), 1),
+                                 (len(optimization_report['optimized_layers']) + len(optimization_report['unsupported_ops'])),
             'hexagon_utilization': min(total_speedup / 4.0, 1.0)  # Normalize to 100%
         }
         
         return optimization_report
     
-    def generate_hexagon_config(self, model: Any, output_path: str):
+    def generate_hexagon_config(self, model: nn.Module, output_path: str):
         """Generate Hexagon SDK configuration file."""
         config = {
             "version": "1.0",
@@ -320,16 +314,15 @@ class HexagonOptimizer:
         }
         
         # Add layer-specific configurations
-        if TORCH_AVAILABLE and hasattr(model, 'named_modules'):
-            for name, module in model.named_modules():
-                if nn is not None and isinstance(module, (nn.Linear, nn.Conv2d)):
-                    layer_config = {
-                        "name": name,
-                        "type": type(module).__name__,
-                        "quantization": "int2",
-                        "execution_unit": "hexagon_tensor" if isinstance(module, nn.Linear) else "hexagon_conv"
-                    }
-                    config["layers"].append(layer_config)
+        for name, module in model.named_modules():
+            if isinstance(module, (nn.Linear, nn.Conv2d)):
+                layer_config = {
+                    "name": name,
+                    "type": type(module).__name__,
+                    "quantization": "int2",
+                    "execution_unit": "hexagon_tensor" if isinstance(module, nn.Linear) else "hexagon_conv"
+                }
+                config["layers"].append(layer_config)
         
         # Save configuration
         with open(output_path, 'w') as f:
@@ -342,14 +335,11 @@ class QuantizationValidator:
     """Validation tools for quantized models."""
     
     @staticmethod
-    def validate_accuracy(original_model: Any, quantized_model: Any,
+    def validate_accuracy(original_model: nn.Module, quantized_model: nn.Module,
                          test_dataloader, tolerance: float = 0.05) -> Dict[str, Any]:
         """Validate quantized model accuracy against original."""
-        if not TORCH_AVAILABLE:
+        if torch is None:
             return {"error": "PyTorch not available"}
-        
-        if not (hasattr(original_model, 'eval') and hasattr(quantized_model, 'eval')):
-            return {"error": "Invalid model types"}
             
         original_model.eval()
         quantized_model.eval()
@@ -381,14 +371,11 @@ class QuantizationValidator:
         mse = torch.mean((original_concat - quantized_concat) ** 2).item()
         
         # Cosine similarity
-        if hasattr(torch.nn.functional, 'cosine_similarity'):
-            cos_sim = torch.nn.functional.cosine_similarity(
-                original_concat.flatten(), 
-                quantized_concat.flatten(), 
-                dim=0
-            ).item()
-        else:
-            cos_sim = 0.0
+        cos_sim = F.cosine_similarity(
+            original_concat.flatten(), 
+            quantized_concat.flatten(), 
+            dim=0
+        ).item()
         
         # Accuracy within tolerance
         within_tolerance = torch.mean(
@@ -404,14 +391,83 @@ class QuantizationValidator:
             "tolerance_threshold": tolerance,
             "validation_passed": within_tolerance > 0.95  # 95% of outputs within tolerance
         }
+    
+    @staticmethod
+    def analyze_quantization_errors(original_model: nn.Module, quantized_model: nn.Module,
+                                  sample_input: torch.Tensor) -> Dict[str, Any]:
+        """Analyze layer-wise quantization errors."""
+        if torch is None:
+            return {"error": "PyTorch not available"}
+            
+        original_model.eval()
+        quantized_model.eval()
+        
+        original_activations = {}
+        quantized_activations = {}
+        
+        # Hook functions to capture intermediate activations
+        def get_activation_hook(name, storage):
+            def hook(model, input, output):
+                if isinstance(output, torch.Tensor):
+                    storage[name] = output.clone().detach()
+            return hook
+        
+        # Register hooks
+        orig_hooks = []
+        quant_hooks = []
+        
+        for name, module in original_model.named_modules():
+            if len(list(module.children())) == 0:  # Leaf modules only
+                hook = module.register_forward_hook(
+                    get_activation_hook(name, original_activations)
+                )
+                orig_hooks.append(hook)
+        
+        for name, module in quantized_model.named_modules():
+            if len(list(module.children())) == 0:  # Leaf modules only
+                hook = module.register_forward_hook(
+                    get_activation_hook(name, quantized_activations)
+                )
+                quant_hooks.append(hook)
+        
+        # Forward pass
+        with torch.no_grad():
+            _ = original_model(sample_input)
+            _ = quantized_model(sample_input)
+        
+        # Remove hooks
+        for hook in orig_hooks + quant_hooks:
+            hook.remove()
+        
+        # Analyze errors
+        layer_errors = {}
+        for name in original_activations.keys():
+            if name in quantized_activations:
+                orig_act = original_activations[name]
+                quant_act = quantized_activations[name]
+                
+                if orig_act.shape == quant_act.shape:
+                    error = torch.mean(torch.abs(orig_act - quant_act)).item()
+                    relative_error = (error / (torch.mean(torch.abs(orig_act)).item() + 1e-8)) * 100
+                    
+                    layer_errors[name] = {
+                        "absolute_error": error,
+                        "relative_error_percent": relative_error,
+                        "activation_range": [orig_act.min().item(), orig_act.max().item()],
+                        "quantized_range": [quant_act.min().item(), quant_act.max().item()]
+                    }
+        
+        return {
+            "layer_errors": layer_errors,
+            "total_layers_analyzed": len(layer_errors),
+            "average_relative_error": np.mean([e["relative_error_percent"] for e in layer_errors.values()]),
+            "max_error_layer": max(layer_errors.items(), key=lambda x: x[1]["relative_error_percent"])[0] if layer_errors else None
+        }
 
 
 # Export utilities
-def export_quantized_model(model: Any, export_path: str, format: str = "onnx"):
+def export_quantized_model(model: nn.Module, export_path: str, format: str = "onnx"):
     """Export quantized model to specified format."""
-    if not TORCH_AVAILABLE:
-        raise ImportError("PyTorch is required for model export")
-    
     if format.lower() == "onnx":
         try:
             dummy_input = torch.randn(1, 3, 224, 224)
@@ -446,43 +502,28 @@ def export_quantized_model(model: Any, export_path: str, format: str = "onnx"):
 if __name__ == "__main__":
     print("Mobile quantization module loaded successfully!")
     
-    if TORCH_AVAILABLE:
+    if torch is not None:
         # Test INT2 quantizer
-        try:
-            quantizer = INT2Quantizer()
-            
-            # Create sample weights
-            weights = torch.randn(128, 64)
-            print(f"Original weights shape: {weights.shape}")
-            print(f"Original weights range: [{weights.min():.3f}, {weights.max():.3f}]")
-            
-            # Quantize
-            quant_weights, scale, zero_point = quantizer.quantize_weights_int2(weights)
-            print(f"Quantized weights range: [{quant_weights.min():.0f}, {quant_weights.max():.0f}]")
-            print(f"Scale: {scale:.6f}, Zero point: {zero_point}")
-            
-            # Dequantize
-            dequant_weights = quantizer.dequantize_weights_int2(quant_weights, scale, zero_point)
-            print(f"Dequantized weights range: [{dequant_weights.min():.3f}, {dequant_weights.max():.3f}]")
-            
-            # Calculate error
-            error = torch.mean(torch.abs(weights - dequant_weights)).item()
-            print(f"Quantization error: {error:.6f}")
-            
-            print("\nQuantization module test completed!")
-            
-        except Exception as e:
-            print(f"Error during testing: {e}")
+        quantizer = INT2Quantizer()
+        
+        # Create sample weights
+        weights = torch.randn(128, 64)
+        print(f"Original weights shape: {weights.shape}")
+        print(f"Original weights range: [{weights.min():.3f}, {weights.max():.3f}]")
+        
+        # Quantize
+        quant_weights, scale, zero_point = quantizer.quantize_weights_int2(weights)
+        print(f"Quantized weights range: [{quant_weights.min():.0f}, {quant_weights.max():.0f}]")
+        print(f"Scale: {scale:.6f}, Zero point: {zero_point}")
+        
+        # Dequantize
+        dequant_weights = quantizer.dequantize_weights_int2(quant_weights, scale, zero_point)
+        print(f"Dequantized weights range: [{dequant_weights.min():.3f}, {dequant_weights.max():.3f}]")
+        
+        # Calculate error
+        error = torch.mean(torch.abs(weights - dequant_weights)).item()
+        print(f"Quantization error: {error:.6f}")
+        
+        print("\nQuantization module test completed!")
     else:
         print("PyTorch not available - quantization module loaded with limited functionality")
-        
-        # Test that basic classes can be instantiated
-        try:
-            quantizer = INT2Quantizer()
-            print("✅ INT2Quantizer created successfully (stub mode)")
-        except Exception as e:
-            print(f"❌ Error creating INT2Quantizer: {e}")
-        
-        # Test HexagonOptimizer (doesn't require PyTorch for basic functionality)
-        optimizer = HexagonOptimizer()
-        print("✅ HexagonOptimizer created successfully")

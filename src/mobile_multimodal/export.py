@@ -165,7 +165,7 @@ class MobileExporter:
         except Exception as e:
             logger.warning(f"ONNX quantization failed: {e}")
     
-    def _validate_onnx_export(self, model_path: str, test_input: torch.Tensor) -> Dict[str, Any]:
+    def _validate_onnx_export(self, model_path: str, test_input: Any) -> Dict[str, Any]:
         """Validate ONNX model export."""
         if ort is None:
             return {"error": "ONNX Runtime not available"}
@@ -184,7 +184,7 @@ class MobileExporter:
                 pytorch_output = self.model(test_input)
             
             # Calculate difference
-            if isinstance(pytorch_output, torch.Tensor):
+            if isinstance(pytorch_output, Any):
                 pytorch_output = pytorch_output.numpy()
             
             mae = np.mean(np.abs(pytorch_output - onnx_output[0]))

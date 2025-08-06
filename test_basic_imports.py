@@ -99,13 +99,15 @@ def test_model_creation():
         
         try:
             model = MobileMultiModalLLM(model_path=None, device="cpu", safety_checks=True)
-            print("❌ Model creation should have failed without PyTorch")
-            return False
-        except ImportError as e:
-            print(f"✅ Expected ImportError caught: {e}")
-            return True
+            info = model.get_model_info()
+            if info.get("mock_mode", False):
+                print(f"✅ Model created successfully in mock mode")
+                return True
+            else:
+                print("❌ Model should be in mock mode without PyTorch")
+                return False
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
+            print(f"❌ Model creation failed unexpectedly: {e}")
             return False
             
     except Exception as e:

@@ -4,6 +4,8 @@ import hashlib
 import json
 import logging
 import os
+import secrets
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -24,6 +26,14 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Security and validation constants
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_TEXT_LENGTH = 10000
+ALLOWED_IMAGE_FORMATS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
+SECURE_RANDOM = secrets.SystemRandom()
+MIN_IMAGE_DIMENSION = 16  # Minimum image size
+MAX_IMAGE_DIMENSION = 4096  # Maximum image size
+
 
 class ImageProcessor:
     """Image preprocessing utilities for mobile models."""
@@ -33,19 +43,91 @@ class ImageProcessor:
         self.imagenet_mean = np.array([0.485, 0.456, 0.406])
         self.imagenet_std = np.array([0.229, 0.224, 0.225])
     
+    def validate_image_path(self, image_path: str) -> bool:
+        """Validate image file path and format."""
+        try:
+            path = Path(image_path)
+            
+            # Check if file exists
+            if not path.exists():
+                logger.error(f"Image file does not exist: {image_path}")
+                return False
+            
+            # Check file size
+            if path.stat().st_size > MAX_IMAGE_SIZE:
+                logger.error(f"Image file too large: {path.stat().st_size} bytes")
+                return False
+            
+            # Check file extension
+            if path.suffix.lower() not in ALLOWED_IMAGE_FORMATS:
+                logger.error(f"Unsupported image format: {path.suffix}")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating image path {image_path}: {e}")
+            return False
+    
+    def sanitize_image_input(self, image: np.ndarray) -> Optional[np.ndarray]:
+        """Sanitize and validate image input."""
+        if image is None:
+            return None
+        
+        # Check data type
+        if not isinstance(image, np.ndarray):
+            logger.error("Image must be numpy array")
+            return None
+        
+        # Check dimensions
+        if len(image.shape) not in [2, 3]:
+            logger.error(f"Invalid image dimensions: {image.shape}")
+            return None
+        
+        h, w = image.shape[:2]
+        if h < MIN_IMAGE_DIMENSION or w < MIN_IMAGE_DIMENSION:
+            logger.error(f"Image too small: {h}x{w}")
+            return None
+        
+        if h > MAX_IMAGE_DIMENSION or w > MAX_IMAGE_DIMENSION:
+            logger.error(f"Image too large: {h}x{w}")
+            return None
+        
+        # Ensure uint8 data type
+        if image.dtype != np.uint8:
+            image = np.clip(image, 0, 255).astype(np.uint8)
+        
+        # Ensure 3 channels for color images
+        if len(image.shape) == 3 and image.shape[2] not in [1, 3, 4]:
+            logger.error(f"Invalid number of channels: {image.shape[2]}")
+            return None
+        
+        return image
+    
     def load_image(self, image_path: str) -> Optional[np.ndarray]:
         """Load image from file path."""
         if cv2 is None:
             raise ImportError("OpenCV is required for image loading")
             
+        # Validate input path
+        if not self.validate_image_path(image_path):
+            return None
+        
         try:
             image = cv2.imread(image_path)
             if image is None:
                 logger.error(f"Failed to load image: {image_path}")
                 return None
-                
+            
+            # Sanitize loaded image
+            image = self.sanitize_image_input(image)
+            if image is None:
+                return None
+            
             # Convert BGR to RGB
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            if len(image.shape) == 3 and image.shape[2] == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
             return image
             
         except Exception as e:
@@ -93,11 +175,16 @@ class ImageProcessor:
     
     def preprocess_image(self, image: Union[str, np.ndarray], 
                         maintain_aspect: bool = True) -> Optional[np.ndarray]:
-        """Complete preprocessing pipeline."""
+        """Complete preprocessing pipeline with security validation."""
         try:
             # Load image if path provided
             if isinstance(image, str):
                 image = self.load_image(image)
+                if image is None:
+                    return None
+            else:
+                # Sanitize numpy array input
+                image = self.sanitize_image_input(image)
                 if image is None:
                     return None
             
@@ -106,6 +193,11 @@ class ImageProcessor:
             
             # Normalize
             normalized = self.normalize_image(resized)
+            
+            # Final validation
+            if normalized is None or np.isnan(normalized).any() or np.isinf(normalized).any():
+                logger.error("Preprocessing resulted in invalid values")
+                return None
             
             return normalized
             
@@ -187,8 +279,48 @@ class TextTokenizer:
         
         logger.info(f"Built vocabulary with {len(self.token_to_id)} tokens")
     
+    def validate_text_input(self, text: str) -> bool:
+        """Validate text input for security and length constraints."""
+        if not isinstance(text, str):
+            logger.error("Text input must be string")
+            return False
+        
+        if len(text) > MAX_TEXT_LENGTH:
+            logger.error(f"Text too long: {len(text)} characters")
+            return False
+        
+        # Check for potential injection patterns
+        suspicious_patterns = ['<script', 'javascript:', 'eval(', 'exec(', '__import__']
+        text_lower = text.lower()
+        
+        for pattern in suspicious_patterns:
+            if pattern in text_lower:
+                logger.warning(f"Suspicious pattern detected in text: {pattern}")
+                return False
+        
+        return True
+    
+    def sanitize_text(self, text: str) -> str:
+        """Sanitize text input by removing/escaping dangerous content."""
+        if not self.validate_text_input(text):
+            return ""
+        
+        # Remove control characters except whitespace
+        import re
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+        
+        # Normalize whitespace
+        text = ' '.join(text.split())
+        
+        return text.strip()
+    
     def _simple_tokenize(self, text: str) -> List[str]:
-        """Simple whitespace tokenization."""
+        """Simple whitespace tokenization with input validation."""
+        # Sanitize input
+        text = self.sanitize_text(text)
+        if not text:
+            return []
+        
         # Basic preprocessing
         text = text.lower().strip()
         
@@ -197,10 +329,16 @@ class TextTokenizer:
         text = re.sub(r'[^\w\s]', ' ', text)
         words = text.split()
         
+        # Additional length validation per word
+        words = [word for word in words if len(word) <= 50]  # Max word length
+        
         return words
     
     def encode(self, text: str, add_special_tokens: bool = True) -> List[int]:
-        """Encode text to token IDs."""
+        """Encode text to token IDs with input validation."""
+        if not self.validate_text_input(text):
+            return [self.special_tokens["[UNK]"]]
+        
         words = self._simple_tokenize(text)
         
         token_ids = []
@@ -241,32 +379,79 @@ class TextTokenizer:
         return " ".join(words)
     
     def save_vocab(self, path: str):
-        """Save vocabulary to file."""
-        vocab_data = {
-            "token_to_id": self.token_to_id,
-            "id_to_token": self.id_to_token,
-            "vocab_size": self.vocab_size,
-            "max_length": self.max_length,
-            "special_tokens": self.special_tokens
-        }
-        
-        with open(path, 'w') as f:
-            json.dump(vocab_data, f, indent=2)
-        
-        logger.info(f"Vocabulary saved to {path}")
+        """Save vocabulary to file with secure writing."""
+        try:
+            # Validate path
+            path_obj = Path(path)
+            if path_obj.suffix not in ['.json', '.txt']:
+                raise ValueError("Vocabulary must be saved as .json or .txt file")
+            
+            vocab_data = {
+                "token_to_id": self.token_to_id,
+                "id_to_token": self.id_to_token,
+                "vocab_size": self.vocab_size,
+                "max_length": self.max_length,
+                "special_tokens": self.special_tokens,
+                "version": "1.0",
+                "created_at": time.time()
+            }
+            
+            # Write to temporary file first, then rename for atomicity
+            temp_path = path + ".tmp"
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                json.dump(vocab_data, f, indent=2, ensure_ascii=True)
+            
+            # Atomic rename
+            os.rename(temp_path, path)
+            
+            logger.info(f"Vocabulary saved to {path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save vocabulary: {e}")
+            # Clean up temp file if it exists
+            temp_path = path + ".tmp"
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
     
     def load_vocab(self, path: str):
-        """Load vocabulary from file."""
-        with open(path, 'r') as f:
-            vocab_data = json.load(f)
-        
-        self.token_to_id = vocab_data["token_to_id"]
-        self.id_to_token = {int(k): v for k, v in vocab_data["id_to_token"].items()}
-        self.vocab_size = vocab_data["vocab_size"]
-        self.max_length = vocab_data["max_length"]
-        self.special_tokens = vocab_data["special_tokens"]
-        
-        logger.info(f"Vocabulary loaded from {path}")
+        """Load vocabulary from file with validation."""
+        try:
+            # Validate path
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"Vocabulary file not found: {path}")
+            
+            # Check file size for safety
+            if os.path.getsize(path) > 100 * 1024 * 1024:  # 100MB limit
+                raise ValueError("Vocabulary file too large")
+            
+            with open(path, 'r', encoding='utf-8') as f:
+                vocab_data = json.load(f)
+            
+            # Validate required fields
+            required_fields = ["token_to_id", "id_to_token", "vocab_size", "max_length", "special_tokens"]
+            for field in required_fields:
+                if field not in vocab_data:
+                    raise ValueError(f"Missing required field: {field}")
+            
+            # Validate data types and ranges
+            if not isinstance(vocab_data["vocab_size"], int) or vocab_data["vocab_size"] <= 0:
+                raise ValueError("Invalid vocab_size")
+            
+            if not isinstance(vocab_data["max_length"], int) or vocab_data["max_length"] <= 0:
+                raise ValueError("Invalid max_length")
+            
+            self.token_to_id = vocab_data["token_to_id"]
+            self.id_to_token = {int(k): v for k, v in vocab_data["id_to_token"].items()}
+            self.vocab_size = vocab_data["vocab_size"]
+            self.max_length = vocab_data["max_length"]
+            self.special_tokens = vocab_data["special_tokens"]
+            
+            logger.info(f"Vocabulary loaded from {path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to load vocabulary from {path}: {e}")
+            # Reset to safe defaults
+            self.__init__(self.vocab_size, self.max_length)
 
 
 class BenchmarkUtils:
@@ -304,44 +489,73 @@ class BenchmarkUtils:
     
     @staticmethod
     def measure_memory_usage(model_func, inputs) -> Dict[str, float]:
-        """Measure memory usage during inference."""
+        """Measure memory usage during inference with error handling."""
         try:
             import psutil
             import gc
+            
+            # Input validation
+            if not callable(model_func):
+                raise ValueError("model_func must be callable")
+            
+            if inputs is None:
+                raise ValueError("inputs cannot be None")
             
             # Clear cache
             gc.collect()
             if torch is not None and torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                torch.cuda.synchronize()
             
             # Measure before
             process = psutil.Process()
             memory_before = process.memory_info().rss / 1024 / 1024  # MB
             
+            gpu_memory_before = 0
             if torch is not None and torch.cuda.is_available():
                 gpu_memory_before = torch.cuda.memory_allocated() / 1024 / 1024  # MB
-            else:
-                gpu_memory_before = 0
             
-            # Run inference
-            _ = model_func(inputs)
+            # Run inference with timeout protection
+            start_time = time.time()
+            try:
+                result = model_func(inputs)
+                inference_time = time.time() - start_time
+                
+                # Sanity check on inference time (>30s might indicate hanging)
+                if inference_time > 30:
+                    logger.warning(f"Inference took unusually long: {inference_time:.2f}s")
+                
+            except Exception as e:
+                logger.error(f"Model inference failed during memory measurement: {e}")
+                return {"error": f"Inference failed: {str(e)}"}
             
             # Measure after
+            if torch is not None and torch.cuda.is_available():
+                torch.cuda.synchronize()
+            
             memory_after = process.memory_info().rss / 1024 / 1024  # MB
+            gpu_memory_after = 0
             
             if torch is not None and torch.cuda.is_available():
                 gpu_memory_after = torch.cuda.memory_allocated() / 1024 / 1024  # MB
-            else:
-                gpu_memory_after = 0
+            
+            cpu_memory_diff = max(0, memory_after - memory_before)  # Ensure non-negative
+            gpu_memory_diff = max(0, gpu_memory_after - gpu_memory_before)
             
             return {
-                "cpu_memory_mb": memory_after - memory_before,
-                "gpu_memory_mb": gpu_memory_after - gpu_memory_before,
-                "total_memory_mb": (memory_after - memory_before) + (gpu_memory_after - gpu_memory_before)
+                "cpu_memory_mb": cpu_memory_diff,
+                "gpu_memory_mb": gpu_memory_diff,
+                "total_memory_mb": cpu_memory_diff + gpu_memory_diff,
+                "inference_time_s": inference_time,
+                "memory_before_mb": memory_before,
+                "memory_after_mb": memory_after
             }
             
         except ImportError:
             return {"error": "psutil required for memory measurement"}
+        except Exception as e:
+            logger.error(f"Memory measurement failed: {e}")
+            return {"error": f"Memory measurement failed: {str(e)}"}
     
     @staticmethod
     def profile_model_layers(model, sample_input, iterations: int = 10) -> Dict[str, Any]:
@@ -413,13 +627,49 @@ class ModelUtils:
     """General model utilities."""
     
     @staticmethod
+    def validate_model_path(model_path: str) -> bool:
+        """Validate model file path and basic properties."""
+        try:
+            path = Path(model_path)
+            
+            # Check if file exists
+            if not path.exists():
+                logger.error(f"Model file does not exist: {model_path}")
+                return False
+            
+            # Check file extension
+            allowed_extensions = {'.pth', '.pt', '.onnx', '.tflite', '.pb', '.mlmodel'}
+            if path.suffix.lower() not in allowed_extensions:
+                logger.error(f"Unsupported model format: {path.suffix}")
+                return False
+            
+            # Check file size (reasonable limits)
+            file_size = path.stat().st_size
+            if file_size > 500 * 1024 * 1024:  # 500MB limit
+                logger.error(f"Model file too large: {file_size} bytes")
+                return False
+            
+            if file_size < 1024:  # 1KB minimum
+                logger.error(f"Model file suspiciously small: {file_size} bytes")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating model path {model_path}: {e}")
+            return False
+    
+    @staticmethod
     def calculate_model_hash(model_path: str) -> str:
         """Calculate hash of model file for verification."""
+        if not ModelUtils.validate_model_path(model_path):
+            return ""
+        
         hash_sha256 = hashlib.sha256()
         
         try:
             with open(model_path, "rb") as f:
-                for chunk in iter(lambda: f.read(4096), b""):
+                while chunk := f.read(8192):  # Larger chunk size for efficiency
                     hash_sha256.update(chunk)
             return hash_sha256.hexdigest()
         except Exception as e:

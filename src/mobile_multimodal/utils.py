@@ -233,6 +233,19 @@ class ImageProcessor:
                 augmented = np.clip((augmented - mean) * factor + mean, 0, 255).astype(np.uint8)
         
         return augmented
+    
+    def compute_image_hash(self, image: np.ndarray) -> str:
+        """Compute hash of image for caching."""
+        if image is None:
+            return "none"
+        try:
+            # Use image shape and a sample of pixels for hash
+            shape_str = str(image.shape)
+            sample_pixels = image[::10, ::10].flatten()[:100]  # Sample pixels
+            content = shape_str.encode() + sample_pixels.tobytes()
+            return hashlib.sha256(content).hexdigest()[:16]  # Short hash
+        except:
+            return "hash_error"
 
 
 class TextTokenizer:

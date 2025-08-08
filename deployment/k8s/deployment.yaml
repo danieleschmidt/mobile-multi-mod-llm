@@ -1,0 +1,239 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-multimodal-llm
+  namespace: production
+  labels:
+    app: mobile-multimodal-llm
+    version: v1.0.0
+    tier: backend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
+  selector:
+    matchLabels:
+      app: mobile-multimodal-llm
+  template:
+    metadata:
+      labels:
+        app: mobile-multimodal-llm
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: mobile-multimodal-llm
+        image: mobile-multimodal:production
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: HEALTH_CHECK_ENABLED
+          value: "true"
+        - name: MAX_WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: mobile-multimodal-config
+              key: max-workers
+        - name: BATCH_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: mobile-multimodal-config
+              key: batch-size
+        - name: CACHE_SIZE_MB
+          valueFrom:
+            configMapKeyRef:
+              name: mobile-multimodal-config
+              key: cache-size-mb
+        - name: REDIS_URL
+          value: "redis://mobile-multimodal-redis:6379"
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: mobile-multimodal-secrets
+              key: sentry-dsn
+              optional: true
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+            ephemeral-storage: "2Gi"
+          limits:
+            cpu: "2000m" 
+            memory: "4Gi"
+            ephemeral-storage: "10Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
+        volumeMounts:
+        - name: cache-volume
+          mountPath: /app/cache
+        - name: logs-volume
+          mountPath: /app/logs
+        - name: metrics-volume
+          mountPath: /app/metrics
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: cache-volume
+        emptyDir:
+          sizeLimit: 2Gi
+      - name: logs-volume
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: metrics-volume
+        emptyDir:
+          sizeLimit: 500Mi
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      serviceAccountName: mobile-multimodal-service-account
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobile-multimodal-llm
+  namespace: production
+  labels:
+    app: mobile-multimodal-llm
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: mobile-multimodal-llm
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mobile-multimodal-config
+  namespace: production
+data:
+  max-workers: "4"
+  batch-size: "8"
+  cache-size-mb: "512"
+  rate-limit-per-minute: "1000"
+  request-timeout: "30"
+  log-level: "INFO"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mobile-multimodal-secrets
+  namespace: production
+type: Opaque
+data:
+  # Base64 encoded values (replace with actual values)
+  sentry-dsn: ""  # Optional: base64 encoded Sentry DSN
+  api-key: ""     # Optional: base64 encoded API key
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mobile-multimodal-service-account
+  namespace: production
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mobile-multimodal-pdb
+  namespace: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: mobile-multimodal-llm
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mobile-multimodal-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mobile-multimodal-llm
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60

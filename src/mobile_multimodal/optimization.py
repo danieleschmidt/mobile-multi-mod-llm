@@ -1,690 +1,732 @@
-"""Performance optimization and scaling utilities for mobile AI deployment.
-
-This module provides advanced optimization techniques including caching, concurrent processing,
-resource pooling, and adaptive performance tuning for mobile multi-modal LLM inference.
-"""
+"""Performance optimization and scaling capabilities for mobile multi-modal models."""
 
 import asyncio
-import logging
+import concurrent.futures
+import functools
+import gc
 import multiprocessing
+import os
 import queue
 import threading
 import time
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from functools import lru_cache, wraps
-import weakref
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union, Callable, Generator
 
 import numpy as np
 
 try:
-    import torch
-    import torch.nn as nn
-    from torch.utils.data import DataLoader
+    import psutil
 except ImportError:
-    torch = None
-    nn = None
-    DataLoader = None
-
-logger = logging.getLogger(__name__)
+    psutil = None
 
 
 @dataclass
-class PerformanceMetrics:
-    """Performance monitoring data structure."""
-    inference_time_ms: float = 0.0
-    memory_usage_mb: float = 0.0
-    cpu_usage_percent: float = 0.0
-    cache_hit_rate: float = 0.0
-    throughput_fps: float = 0.0
-    queue_length: int = 0
-    error_count: int = 0
-    timestamp: float = field(default_factory=time.time)
+class ResourceLimits:
+    """Resource usage limits and thresholds."""
+    max_memory_mb: int = 2048
+    max_cpu_percent: float = 80.0
+    max_concurrent_requests: int = 10
+    max_queue_size: int = 100
+    request_timeout_seconds: float = 30.0
 
 
-class AdaptiveCache:
-    """Intelligent caching system with size limits and TTL."""
+@dataclass 
+class PerformanceProfile:
+    """Performance profile configuration."""
+    batch_size: int = 8
+    num_workers: int = 4
+    enable_mixed_precision: bool = True
+    enable_dynamic_batching: bool = True
+    enable_model_parallel: bool = False
+    cache_size_mb: int = 512
+    prefetch_count: int = 2
+
+
+class ResourceManager:
+    """Manage system resources and enforce limits."""
     
-    def __init__(self, max_size: int = 1000, ttl_seconds: float = 300.0):
-        """Initialize adaptive cache with size and time limits."""
-        self.max_size = max_size
-        self.ttl_seconds = ttl_seconds
-        self.cache: Dict[str, Tuple[Any, float]] = {}
-        self.access_times: Dict[str, float] = {}
-        self.hit_count = 0
-        self.miss_count = 0
-        self._lock = threading.RLock()
-    
-    def get(self, key: str) -> Optional[Any]:
-        """Get item from cache with TTL check."""
-        with self._lock:
-            if key not in self.cache:
-                self.miss_count += 1
-                return None
-            
-            value, creation_time = self.cache[key]
-            
-            # Check TTL
-            if time.time() - creation_time > self.ttl_seconds:
-                self._remove_key(key)
-                self.miss_count += 1
-                return None
-            
-            # Update access time for LRU
-            self.access_times[key] = time.time()
-            self.hit_count += 1
-            return value
-    
-    def put(self, key: str, value: Any) -> None:
-        """Store item in cache with eviction if needed."""
-        with self._lock:
-            current_time = time.time()
-            
-            # Remove expired items
-            self._cleanup_expired()
-            
-            # Evict if at capacity
-            if len(self.cache) >= self.max_size and key not in self.cache:
-                self._evict_lru()
-            
-            # Store new item
-            self.cache[key] = (value, current_time)
-            self.access_times[key] = current_time
-    
-    def _remove_key(self, key: str) -> None:
-        """Remove key from cache and access times."""
-        self.cache.pop(key, None)
-        self.access_times.pop(key, None)
-    
-    def _cleanup_expired(self) -> None:
-        """Remove expired items from cache."""
-        current_time = time.time()
-        expired_keys = [
-            key for key, (_, creation_time) in self.cache.items()
-            if current_time - creation_time > self.ttl_seconds
-        ]
+    def __init__(self, limits: ResourceLimits):
+        self.limits = limits
+        self._active_requests = 0
+        self._request_queue = queue.Queue(maxsize=limits.max_queue_size)
+        self._lock = threading.Lock()
         
-        for key in expired_keys:
-            self._remove_key(key)
+        # Resource monitoring
+        self._cpu_usage_history = []
+        self._memory_usage_history = []
+        self._last_gc_time = time.time()
     
-    def _evict_lru(self) -> None:
-        """Evict least recently used item."""
-        if not self.access_times:
+    def can_accept_request(self) -> bool:
+        """Check if system can accept a new request."""
+        with self._lock:
+            # Check active request limit
+            if self._active_requests >= self.limits.max_concurrent_requests:
+                return False
+            
+            # Check queue capacity
+            if self._request_queue.full():
+                return False
+            
+            # Check system resources
+            if not self._check_system_resources():
+                return False
+            
+            return True
+    
+    def _check_system_resources(self) -> bool:
+        """Check current system resource usage."""
+        try:
+            if psutil is None:
+                return True  # Skip checks if psutil unavailable
+            
+            # Check CPU usage
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            self._cpu_usage_history.append(cpu_percent)
+            if len(self._cpu_usage_history) > 10:
+                self._cpu_usage_history.pop(0)
+            
+            avg_cpu = sum(self._cpu_usage_history) / len(self._cpu_usage_history)
+            if avg_cpu > self.limits.max_cpu_percent:
+                return False
+            
+            # Check memory usage
+            memory = psutil.virtual_memory()
+            memory_mb = memory.used / (1024 * 1024)
+            self._memory_usage_history.append(memory_mb)
+            if len(self._memory_usage_history) > 10:
+                self._memory_usage_history.pop(0)
+            
+            if memory_mb > self.limits.max_memory_mb:
+                return False
+            
+            return True
+            
+        except Exception:
+            return True  # Allow on error
+    
+    @contextmanager
+    def acquire_request_slot(self):
+        """Context manager to acquire and release request slot."""
+        if not self.can_accept_request():
+            raise ResourceExhaustedError("System resource limits exceeded")
+        
+        with self._lock:
+            self._active_requests += 1
+        
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._active_requests -= 1
+            
+            # Trigger GC periodically
+            current_time = time.time()
+            if current_time - self._last_gc_time > 60:  # Every minute
+                gc.collect()
+                self._last_gc_time = current_time
+    
+    def get_resource_stats(self) -> Dict[str, Any]:
+        """Get current resource statistics."""
+        stats = {
+            "active_requests": self._active_requests,
+            "queue_size": self._request_queue.qsize(),
+            "resource_limits": {
+                "max_memory_mb": self.limits.max_memory_mb,
+                "max_cpu_percent": self.limits.max_cpu_percent,
+                "max_concurrent_requests": self.limits.max_concurrent_requests
+            }
+        }
+        
+        if self._cpu_usage_history:
+            stats["avg_cpu_percent"] = sum(self._cpu_usage_history) / len(self._cpu_usage_history)
+        if self._memory_usage_history:
+            stats["avg_memory_mb"] = sum(self._memory_usage_history) / len(self._memory_usage_history)
+        
+        return stats
+
+
+class BatchProcessor:
+    """Dynamic batching for efficient processing."""
+    
+    def __init__(self, max_batch_size: int = 8, max_wait_time: float = 0.1):
+        self.max_batch_size = max_batch_size
+        self.max_wait_time = max_wait_time
+        self._batch_queue = []
+        self._batch_futures = []
+        self._lock = threading.Lock()
+        self._condition = threading.Condition(self._lock)
+        self._processor_thread = None
+        self._processing = False
+    
+    def start_processing(self, process_batch_func: Callable):
+        """Start batch processing thread."""
+        if self._processing:
             return
         
-        lru_key = min(self.access_times.keys(), key=lambda k: self.access_times[k])
-        self._remove_key(lru_key)
+        self._processing = True
+        self._processor_thread = threading.Thread(
+            target=self._batch_processor_loop,
+            args=(process_batch_func,),
+            daemon=True
+        )
+        self._processor_thread.start()
     
-    def get_stats(self) -> Dict[str, Any]:
-        """Get cache performance statistics."""
-        total_requests = self.hit_count + self.miss_count
-        hit_rate = self.hit_count / total_requests if total_requests > 0 else 0.0
+    def stop_processing(self):
+        """Stop batch processing."""
+        self._processing = False
+        with self._condition:
+            self._condition.notify_all()
         
-        return {
-            "size": len(self.cache),
-            "max_size": self.max_size,
-            "hit_rate": hit_rate,
-            "hit_count": self.hit_count,
-            "miss_count": self.miss_count,
-            "total_requests": total_requests
-        }
+        if self._processor_thread:
+            self._processor_thread.join(timeout=5)
     
-    def clear(self) -> None:
-        """Clear all cached items."""
-        with self._lock:
-            self.cache.clear()
-            self.access_times.clear()
-            self.hit_count = 0
-            self.miss_count = 0
+    def submit_for_batching(self, item: Any) -> concurrent.futures.Future:
+        """Submit item for batch processing."""
+        future = concurrent.futures.Future()
+        
+        with self._condition:
+            self._batch_queue.append((item, future))
+            self._batch_futures.append(future)
+            self._condition.notify()
+        
+        return future
+    
+    def _batch_processor_loop(self, process_batch_func: Callable):
+        """Main batch processing loop."""
+        while self._processing:
+            with self._condition:
+                # Wait for items or timeout
+                while not self._batch_queue and self._processing:
+                    self._condition.wait(timeout=self.max_wait_time)
+                
+                if not self._batch_queue:
+                    continue
+                
+                # Collect batch
+                batch_items = []
+                batch_futures = []
+                
+                while (len(batch_items) < self.max_batch_size and 
+                       self._batch_queue):
+                    item, future = self._batch_queue.pop(0)
+                    batch_items.append(item)
+                    batch_futures.append(future)
+            
+            # Process batch outside lock
+            if batch_items:
+                try:
+                    results = process_batch_func(batch_items)
+                    
+                    # Set results
+                    for i, future in enumerate(batch_futures):
+                        if i < len(results):
+                            future.set_result(results[i])
+                        else:
+                            future.set_exception(
+                                RuntimeError("Batch processing returned fewer results than expected")
+                            )
+                
+                except Exception as e:
+                    # Set exception for all futures
+                    for future in batch_futures:
+                        future.set_exception(e)
 
 
 class ModelPool:
     """Pool of model instances for concurrent processing."""
     
-    def __init__(self, model_factory: Callable, pool_size: int = 4):
-        """Initialize model pool with factory function."""
+    def __init__(self, model_factory: Callable, pool_size: int = None):
         self.model_factory = model_factory
-        self.pool_size = pool_size
-        self.models = queue.Queue(maxsize=pool_size)
-        self.total_models = 0
+        self.pool_size = pool_size or multiprocessing.cpu_count()
+        self._pool = queue.Queue()
         self._lock = threading.Lock()
-        self._initialize_pool()
+        self._initialized = False
     
-    def _initialize_pool(self):
-        """Initialize model instances in the pool."""
-        for _ in range(self.pool_size):
-            try:
+    def initialize(self):
+        """Initialize model pool."""
+        if self._initialized:
+            return
+        
+        with self._lock:
+            if self._initialized:
+                return
+            
+            for _ in range(self.pool_size):
                 model = self.model_factory()
-                self.models.put(model)
-                self.total_models += 1
-                logger.info(f"Created model instance {self.total_models}")
-            except Exception as e:
-                logger.error(f"Failed to create model instance: {e}")
-                break
+                self._pool.put(model)
+            
+            self._initialized = True
     
-    def get_model(self, timeout: float = 10.0):
-        """Get model from pool with timeout."""
+    @contextmanager
+    def get_model(self):
+        """Get model from pool."""
+        if not self._initialized:
+            self.initialize()
+        
         try:
-            return self.models.get(timeout=timeout)
-        except queue.Empty:
-            logger.warning("Model pool exhausted, creating temporary instance")
-            return self.model_factory()
+            model = self._pool.get(timeout=30)
+            yield model
+        finally:
+            self._pool.put(model)
     
-    def return_model(self, model):
-        """Return model to pool."""
-        try:
-            self.models.put_nowait(model)
-        except queue.Full:
-            # Pool is full, model will be garbage collected
-            pass
-    
-    def get_pool_stats(self) -> Dict[str, int]:
-        """Get pool utilization statistics."""
+    def get_pool_stats(self) -> Dict[str, Any]:
+        """Get pool statistics."""
         return {
-            "available_models": self.models.qsize(),
-            "total_models": self.total_models,
             "pool_size": self.pool_size,
-            "utilization": (self.pool_size - self.models.qsize()) / self.pool_size
+            "available_models": self._pool.qsize(),
+            "initialized": self._initialized
         }
 
 
-class ResourceMonitor:
-    """System resource monitoring for adaptive performance tuning."""
+class CacheManager:
+    """Advanced caching with LRU, size limits, and automatic cleanup."""
     
-    def __init__(self, monitoring_interval: float = 1.0):
-        """Initialize resource monitor."""
-        self.monitoring_interval = monitoring_interval
-        self.metrics_history: List[PerformanceMetrics] = []
-        self.max_history_size = 1000
-        self.monitoring = False
-        self.monitor_thread = None
-        self._callbacks: List[Callable[[PerformanceMetrics], None]] = []
-    
-    def start_monitoring(self):
-        """Start background resource monitoring."""
-        if self.monitoring:
-            return
+    def __init__(self, max_size_mb: int = 512, max_entries: int = 10000):
+        self.max_size_bytes = max_size_mb * 1024 * 1024
+        self.max_entries = max_entries
         
-        self.monitoring = True
-        self.monitor_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
-        self.monitor_thread.start()
-        logger.info("Resource monitoring started")
-    
-    def stop_monitoring(self):
-        """Stop resource monitoring."""
-        self.monitoring = False
-        if self.monitor_thread:
-            self.monitor_thread.join(timeout=5.0)
-        logger.info("Resource monitoring stopped")
-    
-    def add_callback(self, callback: Callable[[PerformanceMetrics], None]):
-        """Add callback for performance metrics updates."""
-        self._callbacks.append(callback)
-    
-    def _monitoring_loop(self):
-        """Main monitoring loop."""
-        while self.monitoring:
-            try:
-                metrics = self._collect_metrics()
-                self._update_history(metrics)
-                
-                # Notify callbacks
-                for callback in self._callbacks:
-                    try:
-                        callback(metrics)
-                    except Exception as e:
-                        logger.warning(f"Callback error: {e}")
-                
-                time.sleep(self.monitoring_interval)
-                
-            except Exception as e:
-                logger.error(f"Monitoring error: {e}")
-                time.sleep(self.monitoring_interval)
-    
-    def _collect_metrics(self) -> PerformanceMetrics:
-        """Collect current performance metrics."""
-        metrics = PerformanceMetrics()
+        self._cache = {}
+        self._access_order = []
+        self._sizes = {}
+        self._current_size = 0
+        self._lock = threading.RLock()
         
-        try:
-            import psutil
-            
-            # CPU usage
-            metrics.cpu_usage_percent = psutil.cpu_percent(interval=0.1)
-            
-            # Memory usage
-            process = psutil.Process()
-            metrics.memory_usage_mb = process.memory_info().rss / 1024 / 1024
-            
-        except ImportError:
-            logger.debug("psutil not available for resource monitoring")
-        
-        return metrics
+        # Cache statistics
+        self._hits = 0
+        self._misses = 0
+        self._evictions = 0
     
-    def _update_history(self, metrics: PerformanceMetrics):
-        """Update metrics history with size limit."""
-        self.metrics_history.append(metrics)
-        if len(self.metrics_history) > self.max_history_size:
-            self.metrics_history.pop(0)
-    
-    def get_average_metrics(self, window_size: int = 10) -> Optional[PerformanceMetrics]:
-        """Get averaged metrics over recent window."""
-        if not self.metrics_history:
-            return None
-        
-        recent_metrics = self.metrics_history[-window_size:]
-        
-        return PerformanceMetrics(
-            inference_time_ms=np.mean([m.inference_time_ms for m in recent_metrics]),
-            memory_usage_mb=np.mean([m.memory_usage_mb for m in recent_metrics]),
-            cpu_usage_percent=np.mean([m.cpu_usage_percent for m in recent_metrics]),
-            cache_hit_rate=np.mean([m.cache_hit_rate for m in recent_metrics]),
-            throughput_fps=np.mean([m.throughput_fps for m in recent_metrics]),
-            queue_length=int(np.mean([m.queue_length for m in recent_metrics])),
-            error_count=sum(m.error_count for m in recent_metrics)
-        )
-
-
-class OptimizedInferenceEngine:
-    """High-performance inference engine with adaptive optimization."""
-    
-    def __init__(self, model_factory: Callable, 
-                 pool_size: int = 4,
-                 cache_size: int = 1000,
-                 enable_batching: bool = True):
-        """Initialize optimized inference engine."""
-        self.model_pool = ModelPool(model_factory, pool_size)
-        self.cache = AdaptiveCache(max_size=cache_size)
-        self.enable_batching = enable_batching
-        self.executor = ThreadPoolExecutor(max_workers=pool_size * 2)
-        self.batch_queue = queue.Queue()
-        self.batch_size = 8
-        self.batch_timeout = 0.05  # 50ms
-        self.resource_monitor = ResourceMonitor()
-        
-        # Performance tracking
-        self.total_requests = 0
-        self.total_errors = 0
-        self.processing_times = []
-        
-        # Start background services
-        self.resource_monitor.start_monitoring()
-        if enable_batching:
-            self._start_batch_processor()
-    
-    def _start_batch_processor(self):
-        """Start background batch processing."""
-        def batch_processor():
-            batch = []
-            last_batch_time = time.time()
-            
-            while True:
-                try:
-                    # Try to get item with timeout
-                    try:
-                        item = self.batch_queue.get(timeout=self.batch_timeout)
-                        batch.append(item)
-                    except queue.Empty:
-                        pass
-                    
-                    # Process batch if full or timeout reached
-                    current_time = time.time()
-                    should_process = (
-                        len(batch) >= self.batch_size or
-                        (batch and current_time - last_batch_time > self.batch_timeout)
-                    )
-                    
-                    if should_process and batch:
-                        self._process_batch(batch)
-                        batch = []
-                        last_batch_time = current_time
-                    
-                except Exception as e:
-                    logger.error(f"Batch processor error: {e}")
-                    batch = []
-        
-        batch_thread = threading.Thread(target=batch_processor, daemon=True)
-        batch_thread.start()
-    
-    def _process_batch(self, batch: List[Tuple[Any, asyncio.Future]]):
-        """Process a batch of inference requests."""
-        if not batch:
-            return
-        
-        try:
-            # Get model from pool
-            model = self.model_pool.get_model()
-            
-            # Extract inputs from batch
-            inputs = [item[0] for item in batch]
-            futures = [item[1] for item in batch]
-            
-            try:
-                # Batch inference (if supported)
-                results = self._batch_inference(model, inputs)
-                
-                # Set results for futures
-                for future, result in zip(futures, results):
-                    if not future.done():
-                        future.set_result(result)
-                        
-            except Exception as e:
-                # Set exception for all futures
-                for future in futures:
-                    if not future.done():
-                        future.set_exception(e)
-                        
-            finally:
-                # Return model to pool
-                self.model_pool.return_model(model)
-                
-        except Exception as e:
-            logger.error(f"Batch processing failed: {e}")
-            # Set exception for all futures
-            for _, future in batch:
-                if not future.done():
-                    future.set_exception(e)
-    
-    def _batch_inference(self, model, inputs: List[Any]) -> List[Any]:
-        """Perform batched inference."""
-        # Default implementation - override for model-specific batching
-        results = []
-        for input_data in inputs:
-            result = model(input_data)
-            results.append(result)
-        return results
-    
-    async def inference_async(self, input_data: Any, cache_key: Optional[str] = None) -> Any:
-        """Asynchronous inference with caching."""
-        start_time = time.time()
-        self.total_requests += 1
-        
-        try:
-            # Check cache first
-            if cache_key:
-                cached_result = self.cache.get(cache_key)
-                if cached_result is not None:
-                    return cached_result
-            
-            # Submit for batch processing if enabled
-            if self.enable_batching:
-                future = asyncio.get_event_loop().create_future()
-                self.batch_queue.put((input_data, future))
-                result = await future
+    def get(self, key: str) -> Optional[Any]:
+        """Get item from cache."""
+        with self._lock:
+            if key in self._cache:
+                # Update access order
+                self._access_order.remove(key)
+                self._access_order.append(key)
+                self._hits += 1
+                return self._cache[key]
             else:
-                # Direct inference
-                result = await self._direct_inference_async(input_data)
+                self._misses += 1
+                return None
+    
+    def put(self, key: str, value: Any, size_hint: int = None) -> bool:
+        """Put item in cache."""
+        with self._lock:
+            # Calculate size
+            if size_hint is None:
+                try:
+                    size_hint = self._estimate_size(value)
+                except:
+                    size_hint = 1024  # Default size
+            
+            # Check if item would exceed cache limits
+            if size_hint > self.max_size_bytes:
+                return False
+            
+            # Remove existing entry if present
+            if key in self._cache:
+                self._current_size -= self._sizes[key]
+                self._access_order.remove(key)
+            
+            # Evict items if necessary
+            while (self._current_size + size_hint > self.max_size_bytes or 
+                   len(self._cache) >= self.max_entries):
+                if not self._access_order:
+                    break
+                
+                lru_key = self._access_order.pop(0)
+                self._current_size -= self._sizes[lru_key]
+                del self._cache[lru_key]
+                del self._sizes[lru_key]
+                self._evictions += 1
+            
+            # Add new item
+            self._cache[key] = value
+            self._sizes[key] = size_hint
+            self._current_size += size_hint
+            self._access_order.append(key)
+            
+            return True
+    
+    def _estimate_size(self, obj: Any) -> int:
+        """Estimate object size in bytes."""
+        if isinstance(obj, np.ndarray):
+            return obj.nbytes
+        elif isinstance(obj, (str, bytes)):
+            return len(obj)
+        elif isinstance(obj, (list, tuple)):
+            return sum(self._estimate_size(item) for item in obj)
+        elif isinstance(obj, dict):
+            return sum(self._estimate_size(k) + self._estimate_size(v) 
+                      for k, v in obj.items())
+        else:
+            # Rough estimate
+            return 1024
+    
+    def clear(self):
+        """Clear all cache entries."""
+        with self._lock:
+            self._cache.clear()
+            self._access_order.clear()
+            self._sizes.clear()
+            self._current_size = 0
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        with self._lock:
+            total_requests = self._hits + self._misses
+            hit_rate = self._hits / total_requests if total_requests > 0 else 0
+            
+            return {
+                "entries": len(self._cache),
+                "size_mb": self._current_size / (1024 * 1024),
+                "max_size_mb": self.max_size_bytes / (1024 * 1024),
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": hit_rate,
+                "evictions": self._evictions
+            }
+
+
+class PerformanceOptimizer:
+    """Comprehensive performance optimization system."""
+    
+    def __init__(self, profile: PerformanceProfile):
+        self.profile = profile
+        self.resource_manager = ResourceManager(ResourceLimits())
+        self.cache_manager = CacheManager(profile.cache_size_mb)
+        self.batch_processor = BatchProcessor(profile.batch_size)
+        
+        # Thread pools
+        self.io_executor = ThreadPoolExecutor(
+            max_workers=profile.num_workers,
+            thread_name_prefix="io-worker"
+        )
+        self.cpu_executor = ThreadPoolExecutor(
+            max_workers=profile.num_workers,
+            thread_name_prefix="cpu-worker"
+        )
+        
+        # Performance metrics
+        self._optimization_stats = {
+            "cache_hits": 0,
+            "batch_processing_count": 0,
+            "parallel_processing_count": 0
+        }
+    
+    def optimize_inference(self, inference_func: Callable) -> Callable:
+        """Optimize inference function with caching and batching."""
+        @functools.wraps(inference_func)
+        def optimized_wrapper(*args, **kwargs):
+            # Generate cache key
+            cache_key = self._generate_cache_key(inference_func.__name__, args, kwargs)
+            
+            # Try cache first
+            cached_result = self.cache_manager.get(cache_key)
+            if cached_result is not None:
+                self._optimization_stats["cache_hits"] += 1
+                return cached_result
+            
+            # Use resource manager
+            with self.resource_manager.acquire_request_slot():
+                result = inference_func(*args, **kwargs)
             
             # Cache result
-            if cache_key:
-                self.cache.put(cache_key, result)
-            
-            # Update metrics
-            processing_time = (time.time() - start_time) * 1000
-            self.processing_times.append(processing_time)
-            if len(self.processing_times) > 1000:
-                self.processing_times.pop(0)
+            self.cache_manager.put(cache_key, result)
             
             return result
-            
-        except Exception as e:
-            self.total_errors += 1
-            logger.error(f"Inference failed: {e}")
-            raise
-    
-    async def _direct_inference_async(self, input_data: Any) -> Any:
-        """Direct asynchronous inference without batching."""
-        loop = asyncio.get_event_loop()
         
-        def inference_task():
-            model = self.model_pool.get_model()
+        return optimized_wrapper
+    
+    def optimize_batch_processing(self, batch_func: Callable, items: List[Any]) -> List[Any]:
+        """Optimize batch processing with dynamic batching."""
+        if not items:
+            return []
+        
+        if len(items) == 1:
+            return [batch_func([items[0]])[0]]
+        
+        # Use batch processor
+        futures = []
+        for item in items:
+            future = self.batch_processor.submit_for_batching(item)
+            futures.append(future)
+        
+        # Start processing if not already started
+        if not self.batch_processor._processing:
+            self.batch_processor.start_processing(batch_func)
+        
+        # Collect results
+        results = []
+        for future in futures:
             try:
-                return model(input_data)
-            finally:
-                self.model_pool.return_model(model)
+                result = future.result(timeout=30)
+                results.append(result)
+            except Exception as e:
+                results.append(f"Error: {e}")
         
-        return await loop.run_in_executor(self.executor, inference_task)
+        self._optimization_stats["batch_processing_count"] += len(items)
+        return results
     
-    def inference_sync(self, input_data: Any, cache_key: Optional[str] = None) -> Any:
-        """Synchronous inference wrapper."""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(self.inference_async(input_data, cache_key))
-        finally:
-            loop.close()
-    
-    def get_performance_stats(self) -> Dict[str, Any]:
-        """Get comprehensive performance statistics."""
-        cache_stats = self.cache.get_stats()
-        pool_stats = self.model_pool.get_pool_stats()
+    def optimize_parallel_processing(self, func: Callable, items: List[Any], 
+                                   use_processes: bool = False) -> List[Any]:
+        """Optimize with parallel processing."""
+        if not items:
+            return []
         
-        stats = {
-            "total_requests": self.total_requests,
-            "total_errors": self.total_errors,
-            "error_rate": self.total_errors / max(self.total_requests, 1),
-            "cache": cache_stats,
-            "model_pool": pool_stats,
-            "batch_queue_size": self.batch_queue.qsize()
+        executor = ProcessPoolExecutor if use_processes else self.cpu_executor
+        
+        if use_processes and isinstance(executor, type):
+            # Create process pool for this operation
+            with ProcessPoolExecutor(max_workers=self.profile.num_workers) as proc_executor:
+                futures = [proc_executor.submit(func, item) for item in items]
+                results = [future.result() for future in futures]
+        else:
+            # Use existing thread pool
+            futures = [self.cpu_executor.submit(func, item) for item in items]
+            results = [future.result() for future in futures]
+        
+        self._optimization_stats["parallel_processing_count"] += len(items)
+        return results
+    
+    def _generate_cache_key(self, func_name: str, args: Tuple, kwargs: Dict) -> str:
+        """Generate cache key for function call."""
+        import hashlib
+        import json
+        
+        # Create deterministic key
+        key_data = {
+            "function": func_name,
+            "args": self._serialize_args(args),
+            "kwargs": self._serialize_args(kwargs)
         }
         
-        if self.processing_times:
-            times = np.array(self.processing_times)
-            stats["latency"] = {
-                "mean_ms": float(np.mean(times)),
-                "median_ms": float(np.median(times)),
-                "p95_ms": float(np.percentile(times, 95)),
-                "p99_ms": float(np.percentile(times, 99)),
-                "min_ms": float(np.min(times)),
-                "max_ms": float(np.max(times))
-            }
-        
-        # Resource metrics
-        avg_metrics = self.resource_monitor.get_average_metrics()
-        if avg_metrics:
-            stats["resources"] = {
-                "cpu_usage_percent": avg_metrics.cpu_usage_percent,
-                "memory_usage_mb": avg_metrics.memory_usage_mb
-            }
-        
-        return stats
+        key_str = json.dumps(key_data, sort_keys=True, default=str)
+        return hashlib.md5(key_str.encode()).hexdigest()
     
-    def optimize_parameters(self):
-        """Adaptively optimize performance parameters."""
-        stats = self.get_performance_stats()
-        
-        # Adaptive batch size tuning
-        if "latency" in stats:
-            p95_latency = stats["latency"]["p95_ms"]
-            
-            if p95_latency > 100:  # High latency
-                self.batch_size = max(1, self.batch_size - 1)
-                self.batch_timeout = min(0.1, self.batch_timeout * 1.1)
-            elif p95_latency < 50:  # Low latency
-                self.batch_size = min(32, self.batch_size + 1)
-                self.batch_timeout = max(0.01, self.batch_timeout * 0.9)
-        
-        # Adaptive cache size
-        cache_hit_rate = stats["cache"]["hit_rate"]
-        if cache_hit_rate < 0.5:  # Low hit rate
-            self.cache.max_size = min(5000, int(self.cache.max_size * 1.2))
-        elif cache_hit_rate > 0.9:  # High hit rate
-            self.cache.max_size = max(100, int(self.cache.max_size * 0.9))
-        
-        logger.info(f"Optimized parameters: batch_size={self.batch_size}, "
-                   f"batch_timeout={self.batch_timeout:.3f}, "
-                   f"cache_size={self.cache.max_size}")
+    def _serialize_args(self, args) -> Any:
+        """Serialize arguments for cache key generation."""
+        if isinstance(args, (list, tuple)):
+            return [self._serialize_args(arg) for arg in args]
+        elif isinstance(args, dict):
+            return {k: self._serialize_args(v) for k, v in args.items()}
+        elif isinstance(args, np.ndarray):
+            return f"ndarray_shape_{args.shape}_dtype_{args.dtype}_hash_{hash(args.data.tobytes())}"
+        elif hasattr(args, '__dict__'):
+            return str(type(args).__name__)
+        else:
+            return str(args)
     
-    def shutdown(self):
-        """Gracefully shutdown inference engine."""
-        self.resource_monitor.stop_monitoring()
-        self.executor.shutdown(wait=True)
-        logger.info("Inference engine shutdown complete")
+    def get_optimization_stats(self) -> Dict[str, Any]:
+        """Get optimization statistics."""
+        return {
+            "optimization_stats": self._optimization_stats.copy(),
+            "cache_stats": self.cache_manager.get_stats(),
+            "resource_stats": self.resource_manager.get_resource_stats()
+        }
+    
+    def cleanup(self):
+        """Cleanup resources."""
+        self.batch_processor.stop_processing()
+        self.io_executor.shutdown(wait=True)
+        self.cpu_executor.shutdown(wait=True)
+        self.cache_manager.clear()
 
 
 class AutoScaler:
     """Automatic scaling based on load and performance metrics."""
     
-    def __init__(self, inference_engine: OptimizedInferenceEngine):
-        """Initialize auto-scaler."""
-        self.inference_engine = inference_engine
-        self.scaling_enabled = True
-        self.scale_up_threshold = 80  # CPU percentage
-        self.scale_down_threshold = 30
-        self.min_pool_size = 2
-        self.max_pool_size = 16
-        self.scaling_cooldown = 60  # seconds
-        self.last_scaling_time = 0
-    
-    def evaluate_scaling(self) -> Dict[str, Any]:
-        """Evaluate if scaling is needed."""
-        stats = self.inference_engine.get_performance_stats()
-        current_time = time.time()
-        
-        scaling_decision = {
-            "action": "none",
-            "reason": "",
-            "current_pool_size": stats["model_pool"]["pool_size"],
-            "cpu_usage": stats.get("resources", {}).get("cpu_usage_percent", 0)
+    def __init__(self):
+        self.scaling_metrics = {
+            "cpu_threshold_scale_up": 70.0,
+            "cpu_threshold_scale_down": 30.0,
+            "memory_threshold_scale_up": 70.0,
+            "latency_threshold_scale_up": 2.0,  # seconds
+            "error_rate_threshold": 0.05  # 5%
         }
         
-        # Check cooldown period
-        if current_time - self.last_scaling_time < self.scaling_cooldown:
-            scaling_decision["reason"] = "Scaling in cooldown period"
-            return scaling_decision
-        
-        cpu_usage = stats.get("resources", {}).get("cpu_usage_percent", 0)
-        current_pool_size = stats["model_pool"]["pool_size"]
-        queue_size = stats["batch_queue_size"]
-        
-        # Scale up conditions
-        if (cpu_usage > self.scale_up_threshold or queue_size > 10) and \
-           current_pool_size < self.max_pool_size:
-            scaling_decision["action"] = "scale_up"
-            scaling_decision["reason"] = f"High load: CPU {cpu_usage}%, Queue {queue_size}"
-        
-        # Scale down conditions
-        elif cpu_usage < self.scale_down_threshold and queue_size == 0 and \
-             current_pool_size > self.min_pool_size:
-            scaling_decision["action"] = "scale_down"
-            scaling_decision["reason"] = f"Low load: CPU {cpu_usage}%"
-        
-        return scaling_decision
+        self.current_capacity = 1.0  # Current scaling factor
+        self.min_capacity = 0.5
+        self.max_capacity = 4.0
+        self.scaling_history = []
     
-    def apply_scaling(self, action: str) -> bool:
-        """Apply scaling decision."""
-        if not self.scaling_enabled:
-            return False
+    def should_scale(self, metrics: Dict[str, float]) -> Tuple[bool, float]:
+        """Determine if scaling is needed and by how much."""
+        scale_up_signals = 0
+        scale_down_signals = 0
         
-        if action == "scale_up":
-            # Add model to pool (simplified implementation)
-            self.last_scaling_time = time.time()
-            logger.info("Scaled up model pool")
-            return True
-            
-        elif action == "scale_down":
-            # Remove model from pool (simplified implementation)
-            self.last_scaling_time = time.time()
-            logger.info("Scaled down model pool")
-            return True
+        # CPU utilization
+        cpu_percent = metrics.get("avg_cpu_percent", 0)
+        if cpu_percent > self.scaling_metrics["cpu_threshold_scale_up"]:
+            scale_up_signals += 1
+        elif cpu_percent < self.scaling_metrics["cpu_threshold_scale_down"]:
+            scale_down_signals += 1
         
-        return False
+        # Memory utilization
+        memory_percent = metrics.get("memory_percent", 0)
+        if memory_percent > self.scaling_metrics["memory_threshold_scale_up"]:
+            scale_up_signals += 1
+        
+        # Latency
+        avg_latency = metrics.get("avg_latency_ms", 0) / 1000
+        if avg_latency > self.scaling_metrics["latency_threshold_scale_up"]:
+            scale_up_signals += 1
+        
+        # Error rate
+        error_rate = metrics.get("error_rate", 0)
+        if error_rate > self.scaling_metrics["error_rate_threshold"]:
+            scale_up_signals += 1
+        
+        # Make scaling decision
+        if scale_up_signals >= 2:  # Need at least 2 signals
+            new_capacity = min(self.current_capacity * 1.5, self.max_capacity)
+            return True, new_capacity
+        elif scale_down_signals >= 2 and scale_up_signals == 0:
+            new_capacity = max(self.current_capacity * 0.8, self.min_capacity)
+            return True, new_capacity
+        
+        return False, self.current_capacity
+    
+    def apply_scaling(self, new_capacity: float) -> Dict[str, Any]:
+        """Apply scaling configuration."""
+        scaling_event = {
+            "timestamp": time.time(),
+            "old_capacity": self.current_capacity,
+            "new_capacity": new_capacity,
+            "scaling_ratio": new_capacity / self.current_capacity
+        }
+        
+        self.current_capacity = new_capacity
+        self.scaling_history.append(scaling_event)
+        
+        # Keep only recent history
+        if len(self.scaling_history) > 100:
+            self.scaling_history.pop(0)
+        
+        return scaling_event
+    
+    def get_scaling_recommendations(self, metrics: Dict[str, float]) -> Dict[str, Any]:
+        """Get scaling recommendations without applying them."""
+        should_scale, new_capacity = self.should_scale(metrics)
+        
+        return {
+            "should_scale": should_scale,
+            "current_capacity": self.current_capacity,
+            "recommended_capacity": new_capacity,
+            "scaling_factor": new_capacity / self.current_capacity if self.current_capacity > 0 else 1.0,
+            "scaling_history": self.scaling_history[-5:]  # Last 5 events
+        }
 
 
-# Decorator for automatic caching and performance monitoring
-def cached_inference(cache_key_func: Callable = None, ttl: float = 300.0):
-    """Decorator for caching inference results."""
+class ResourceExhaustedError(Exception):
+    """Raised when system resources are exhausted."""
+    pass
+
+
+# Decorators for performance optimization
+def cached(cache_manager: CacheManager, ttl: int = 3600):
+    """Decorator to cache function results."""
     def decorator(func):
-        func_cache = AdaptiveCache(max_size=1000, ttl_seconds=ttl)
-        
-        @wraps(func)
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Generate cache key
-            if cache_key_func:
-                cache_key = cache_key_func(*args, **kwargs)
-            else:
-                cache_key = f"{func.__name__}_{hash((args, tuple(sorted(kwargs.items()))))}"
+            key_data = f"{func.__name__}:{hash((args, tuple(kwargs.items())))}"
             
-            # Check cache
-            result = func_cache.get(cache_key)
+            # Try cache first
+            result = cache_manager.get(key_data)
             if result is not None:
                 return result
             
-            # Execute function
+            # Compute result
             result = func(*args, **kwargs)
             
             # Cache result
-            func_cache.put(cache_key, result)
+            cache_manager.put(key_data, result)
             
             return result
         
-        wrapper.cache = func_cache
         return wrapper
     return decorator
 
 
-# Performance monitoring decorator
-def monitor_performance(func):
-    """Decorator for monitoring function performance."""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start_time = time.time()
-        start_memory = 0
-        
-        try:
-            import psutil
-            process = psutil.Process()
-            start_memory = process.memory_info().rss
-        except ImportError:
-            pass
-        
-        try:
-            result = func(*args, **kwargs)
-            success = True
-        except Exception as e:
-            result = None
-            success = False
-            raise
-        finally:
-            end_time = time.time()
-            execution_time = (end_time - start_time) * 1000
-            
-            try:
-                end_memory = process.memory_info().rss
-                memory_delta = (end_memory - start_memory) / 1024 / 1024  # MB
-            except:
-                memory_delta = 0
-            
-            logger.info(f"Function {func.__name__}: "
-                       f"time={execution_time:.2f}ms, "
-                       f"memory_delta={memory_delta:.2f}MB, "
-                       f"success={success}")
-        
-        return result
-    return wrapper
+def async_executor(executor: concurrent.futures.Executor):
+    """Decorator to run function in executor."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            return executor.submit(func, *args, **kwargs)
+        return wrapper
+    return decorator
 
 
+# Example usage and testing
 if __name__ == "__main__":
-    print("Performance optimization module loaded successfully!")
+    print("Testing performance optimization system...")
     
-    # Example usage demonstration
-    def dummy_model_factory():
-        """Example model factory for testing."""
-        return lambda x: x * 2  # Simple dummy model
+    # Test resource manager
+    resource_manager = ResourceManager(ResourceLimits(max_concurrent_requests=2))
     
-    # Test adaptive cache
-    cache = AdaptiveCache(max_size=100, ttl_seconds=60)
-    cache.put("test", "value")
-    cached_value = cache.get("test")
-    print(f"Cache test: {cached_value}")
-    print(f"Cache stats: {cache.get_stats()}")
+    with resource_manager.acquire_request_slot():
+        print("✅ Resource slot acquired")
+        stats = resource_manager.get_resource_stats()
+        print(f"   Active requests: {stats['active_requests']}")
     
-    # Test model pool
-    pool = ModelPool(dummy_model_factory, pool_size=2)
-    model = pool.get_model()
-    result = model(5)
-    pool.return_model(model)
-    print(f"Model pool test: {result}")
-    print(f"Pool stats: {pool.get_pool_stats()}")
+    # Test cache manager
+    cache = CacheManager(max_size_mb=10)
     
-    logger.info("Optimization module ready for high-performance inference")
+    cache.put("test_key", "test_value")
+    result = cache.get("test_key")
+    print(f"✅ Cache test: {result}")
+    
+    cache_stats = cache.get_stats()
+    print(f"   Cache hit rate: {cache_stats['hit_rate']:.2%}")
+    
+    # Test batch processor
+    def mock_batch_func(items):
+        return [f"processed_{item}" for item in items]
+    
+    batch_processor = BatchProcessor(max_batch_size=3)
+    batch_processor.start_processing(mock_batch_func)
+    
+    futures = []
+    for i in range(5):
+        future = batch_processor.submit_for_batching(f"item_{i}")
+        futures.append(future)
+    
+    results = [f.result(timeout=5) for f in futures]
+    print(f"✅ Batch processing: {results}")
+    
+    batch_processor.stop_processing()
+    
+    # Test performance optimizer
+    profile = PerformanceProfile(batch_size=4, num_workers=2)
+    optimizer = PerformanceOptimizer(profile)
+    
+    @optimizer.optimize_inference
+    def mock_inference(data):
+        return f"result_for_{data}"
+    
+    # Test optimized function
+    result1 = mock_inference("test_data")
+    result2 = mock_inference("test_data")  # Should use cache
+    print(f"✅ Optimized inference: {result1}, cached: {result2}")
+    
+    # Test auto-scaler
+    scaler = AutoScaler()
+    test_metrics = {
+        "avg_cpu_percent": 75.0,
+        "memory_percent": 80.0,
+        "avg_latency_ms": 2500,
+        "error_rate": 0.02
+    }
+    
+    recommendations = scaler.get_scaling_recommendations(test_metrics)
+    print(f"✅ Auto-scaling recommendations: {recommendations['should_scale']}")
+    
+    # Cleanup
+    optimizer.cleanup()
+    
+    print("🎉 Performance optimization tests completed!")

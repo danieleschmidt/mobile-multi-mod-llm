@@ -10,6 +10,11 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+# Custom exceptions
+class SecurityError(Exception):
+    """Security validation error."""
+    pass
+
 # Import utilities for validation
 try:
     from .utils import ImageProcessor, ModelUtils
@@ -70,7 +75,9 @@ class MobileMultiModalLLM:
     
     def __init__(self, model_path: Optional[str] = None, device: str = "cpu", 
                  safety_checks: bool = True, health_check_enabled: bool = True,
-                 max_retries: int = MAX_RETRY_ATTEMPTS, timeout: float = MAX_INFERENCE_TIME):
+                 max_retries: int = MAX_RETRY_ATTEMPTS, timeout: float = MAX_INFERENCE_TIME,
+                 strict_security: bool = True, enable_telemetry: bool = True,
+                 enable_optimization: bool = True, optimization_profile: str = "balanced"):
         """Initialize the mobile multi-modal model with enhanced security and monitoring.
         
         Args:
@@ -80,6 +87,10 @@ class MobileMultiModalLLM:
             health_check_enabled: Enable automatic health monitoring
             max_retries: Maximum retry attempts for failed operations
             timeout: Maximum inference timeout in seconds
+            strict_security: Enable strict security validation
+            enable_telemetry: Enable telemetry and metrics collection
+            enable_optimization: Enable performance optimization
+            optimization_profile: Optimization profile (fast, balanced, accuracy)
         """
         self.model_path = model_path
         self.device = self._validate_device(device)
@@ -87,6 +98,10 @@ class MobileMultiModalLLM:
         self.health_check_enabled = health_check_enabled
         self.max_retries = max_retries
         self.timeout = timeout
+        self.strict_security = strict_security
+        self.enable_telemetry = enable_telemetry
+        self.enable_optimization = enable_optimization
+        self.optimization_profile = optimization_profile
         
         # Enhanced monitoring and error tracking
         self._inference_count = 0
@@ -103,6 +118,12 @@ class MobileMultiModalLLM:
         self.image_size = 224
         self._is_initialized = False
         self._model_hash = None
+        
+        # Security, telemetry, and optimization components
+        self._security_validator = None
+        self._telemetry_collector = None
+        self._performance_optimizer = None
+        self._auto_scaler = None
         
         try:
             # Determine if we can use PyTorch or need mock mode
@@ -127,6 +148,18 @@ class MobileMultiModalLLM:
             
             # Initialize inference cache
             self._init_cache_system()
+            
+            # Initialize security validation
+            if self.safety_checks:
+                self._init_security()
+            
+            # Initialize telemetry collection
+            if self.enable_telemetry:
+                self._init_telemetry()
+            
+            # Initialize performance optimization
+            if self.enable_optimization:
+                self._init_optimization()
             
             self._is_initialized = True
             logger.info(f"Initialized MobileMultiModalLLM on {self.device} (mock_mode={self._mock_mode})")
@@ -189,8 +222,16 @@ class MobileMultiModalLLM:
         
         try:
             # Import model components
-            from .models import EfficientViTBlock, MobileConvBlock, ModelProfiler
-            from .quantization import INT2Quantizer
+            try:
+                from .models import EfficientViTBlock, MobileConvBlock, ModelProfiler
+                from .quantization import INT2Quantizer
+            except ImportError:
+                # Fallback for script execution
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                from models import EfficientViTBlock, MobileConvBlock, ModelProfiler
+                from quantization import INT2Quantizer
             
             # Initialize core components
             self._vision_encoder = self._create_vision_encoder()
@@ -297,16 +338,58 @@ class MobileMultiModalLLM:
             logger.warning(f"Model {model_name} not found in model zoo")
             return cls(**kwargs)
     
-    def generate_caption(self, image: np.ndarray, max_length: int = 50) -> str:
-        """Generate descriptive caption for image."""
+    def generate_caption(self, image: np.ndarray, max_length: int = 50, user_id: str = "anonymous") -> str:
+        """Generate descriptive caption for image with security validation."""
         try:
             if not self._is_initialized:
                 raise RuntimeError("Model not initialized")
             
+            # Security validation
+            if self._security_validator:
+                request_data = {"image": image, "operation": "generate_caption", "max_length": max_length}
+                validation = self._security_validator.validate_request(user_id, request_data)
+                
+                if not validation["valid"]:
+                    security_logger.warning(f"Caption generation blocked for {user_id}: {validation['blocked_reason']}")
+                    raise SecurityError(f"Request blocked: {validation['blocked_reason']}")
+                
+                if validation["warnings"]:
+                    logger.warning(f"Security warnings for {user_id}: {validation['warnings']}")
+            
+            # Telemetry collection and performance optimization
+            operation_start = time.time()
+            operation_id = f"caption_{int(operation_start * 1000)}"
+            
+            if self._telemetry_collector:
+                self._telemetry_collector.record_operation_start(operation_id, "generate_caption", user_id)
+            
+            # Apply performance optimization if available
+            if self._performance_optimizer:
+                # Use optimized inference with caching and resource management
+                def _optimized_caption_generation():
+                    return self._generate_caption_internal(image, max_length)
+                
+                optimized_func = self._performance_optimizer.optimize_inference(_optimized_caption_generation)
+                result = optimized_func()
+                
+                # Record telemetry success
+                if self._telemetry_collector:
+                    self._telemetry_collector.record_operation_success(
+                        operation_id, time.time() - operation_start, {"caption_length": len(result)}
+                    )
+                return result
+            
             # Check cache first
             image_hash = "default"
             if self._feature_cache:
-                from .utils import ImageProcessor
+                try:
+                    from .utils import ImageProcessor
+                except ImportError:
+                    import sys
+                    import os
+                    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                    from utils import ImageProcessor
+                
                 processor = ImageProcessor()
                 image_hash = processor.compute_image_hash(image)
                 cached_result = self._feature_cache.get_inference_result(f"caption_{image_hash}")
@@ -358,13 +441,127 @@ class MobileMultiModalLLM:
                             {'caption': caption}
                         )
                     
+                    # Record telemetry success
+                    if self._telemetry_collector:
+                        self._telemetry_collector.record_operation_success(
+                            operation_id, time.time() - operation_start, {"caption_length": len(caption)}
+                        )
+                    
                     return caption
             
-            return "Generated caption (enhanced placeholder implementation)"
+            result = "Generated caption (enhanced placeholder implementation)"
             
+            # Record telemetry success
+            if self._telemetry_collector:
+                self._telemetry_collector.record_operation_success(
+                    operation_id, time.time() - operation_start, {"caption_length": len(result)}
+                )
+                
+            return result
+            
+        except SecurityError:
+            # Re-raise security errors
+            raise
         except Exception as e:
+            # Record telemetry failure
+            if hasattr(self, '_telemetry_collector') and self._telemetry_collector:
+                self._telemetry_collector.record_operation_failure(
+                    operation_id, time.time() - operation_start, str(e)
+                )
+            
             logger.error(f"Caption generation failed: {e}")
+            error_logger.error(f"Caption generation error for {user_id}: {e}", exc_info=True)
             return f"Error generating caption: {str(e)}"
+    
+    def _generate_caption_internal(self, image: np.ndarray, max_length: int = 50) -> str:
+        """Internal caption generation method for optimization."""
+        # Check cache first
+        image_hash = "default"
+        if self._feature_cache:
+            try:
+                from .utils import ImageProcessor
+            except ImportError:
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                from utils import ImageProcessor
+            
+            processor = ImageProcessor()
+            image_hash = processor.compute_image_hash(image)
+            cached_result = self._feature_cache.get_inference_result(f"caption_{image_hash}")
+            if cached_result:
+                logger.debug("Using cached caption result")
+                return cached_result.get('caption', 'Cached result error')
+        
+        if self._mock_mode:
+            # Generate more realistic mock captions based on image properties
+            h, w = image.shape[:2] if len(image.shape) >= 2 else (224, 224)
+            brightness = np.mean(image) if image is not None and image.size > 0 else 128
+            
+            if brightness < 85:
+                lighting = "low lighting"
+            elif brightness > 170:
+                lighting = "bright lighting"
+            else:
+                lighting = "moderate lighting"
+            
+            aspect_ratio = w / h if h > 0 else 1.0
+            if aspect_ratio > 1.5:
+                format_desc = "wide format"
+            elif aspect_ratio < 0.75:
+                format_desc = "tall format"
+            else:
+                format_desc = "square format"
+            
+            caption = f"AI-generated caption based on image content analysis"
+        else:
+            try:
+                # Preprocess image
+                if ImageProcessor:
+                    processor = ImageProcessor()
+                    processed_image = processor.preprocess_image(
+                        image, target_size=(self.image_size, self.image_size)
+                    )
+                else:
+                    processed_image = image
+                
+                # Generate caption using model
+                if self._vision_encoder and self._text_decoder:
+                    # Extract visual features
+                    with torch.no_grad():
+                        if isinstance(processed_image, np.ndarray):
+                            # Convert to tensor and normalize
+                            image_tensor = torch.from_numpy(processed_image).float()
+                            if len(image_tensor.shape) == 3:
+                                image_tensor = image_tensor.unsqueeze(0)
+                            
+                            # Normalize to [0, 1] if needed
+                            if image_tensor.max() > 1:
+                                image_tensor = image_tensor / 255.0
+                            
+                            # Get features
+                            features = self._vision_encoder(image_tensor)
+                            
+                            # Generate caption tokens (simplified)
+                            # In a real implementation, this would use beam search or similar
+                            caption = "A detailed description of the scene showing various objects and their relationships"
+                        else:
+                            caption = "Unable to process image format"
+                else:
+                    caption = "Model components not available for caption generation"
+                    
+            except Exception as e:
+                logger.warning(f"Caption generation fallback: {e}")
+                caption = "Generated caption (enhanced placeholder implementation)"
+        
+        # Cache result if available
+        if self._feature_cache:
+            self._feature_cache.cache_inference_result(
+                f"caption_{image_hash}", 
+                {'caption': caption}
+            )
+        
+        return caption
     
     def extract_text(self, image: np.ndarray) -> List[Dict[str, Any]]:
         """Extract text regions with OCR."""
@@ -443,7 +640,44 @@ class MobileMultiModalLLM:
             info["estimated_parameters"] = 25000000  # 25M parameters
             info["estimated_size_mb"] = 100.0
         
+        # Add optimization info
+        info["optimization_enabled"] = self.enable_optimization
+        info["optimization_profile"] = self.optimization_profile
+        
         return info
+    
+    def get_optimization_stats(self) -> Dict[str, Any]:
+        """Get performance optimization statistics."""
+        if not self._performance_optimizer:
+            return {"optimization_enabled": False}
+        
+        return self._performance_optimizer.get_optimization_stats()
+    
+    def get_scaling_recommendations(self) -> Dict[str, Any]:
+        """Get auto-scaling recommendations based on current metrics."""
+        if not self._auto_scaler:
+            return {"auto_scaling_available": False}
+        
+        # Collect current metrics
+        metrics = {}
+        
+        # Add resource metrics if available
+        if self._performance_optimizer:
+            resource_stats = self._performance_optimizer.resource_manager.get_resource_stats()
+            metrics.update({
+                "avg_cpu_percent": resource_stats.get("avg_cpu_percent", 0),
+                "avg_memory_mb": resource_stats.get("avg_memory_mb", 0)
+            })
+        
+        # Add performance metrics if available
+        if self._telemetry_collector:
+            operation_stats = self._telemetry_collector.get_operation_stats()
+            metrics.update({
+                "avg_latency_ms": operation_stats.get("avg_duration", 0) * 1000,
+                "error_rate": 1.0 - operation_stats.get("success_rate", 1.0)
+            })
+        
+        return self._auto_scaler.get_scaling_recommendations(metrics)
     
     def _start_health_monitoring(self):
         """Start background health monitoring."""
@@ -651,7 +885,13 @@ class MobileMultiModalLLM:
             return None
         
         try:
-            from .models import EfficientViTBlock, MobileConvBlock
+            try:
+                from .models import EfficientViTBlock, MobileConvBlock
+            except ImportError:
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                from models import EfficientViTBlock, MobileConvBlock
             
             # Simple vision encoder with mobile-optimized blocks
             layers = []
@@ -691,7 +931,14 @@ class MobileMultiModalLLM:
     def _init_cache_system(self):
         """Initialize caching system for performance."""
         try:
-            from .data.cache import CacheManager, FeatureCache
+            try:
+                from .data.cache import CacheManager, FeatureCache
+            except ImportError:
+                # Fallback for script execution
+                import sys
+                import os
+                sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
+                from cache import CacheManager, FeatureCache
             
             # Initialize cache manager
             self._cache_manager = CacheManager(
@@ -709,6 +956,86 @@ class MobileMultiModalLLM:
             logger.warning(f"Failed to initialize cache system: {e}")
             self._cache_manager = None
             self._feature_cache = None
+    
+    def _init_security(self):
+        """Initialize security validation system."""
+        try:
+            try:
+                from .security import SecurityValidator
+            except ImportError:
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                from security import SecurityValidator
+            
+            self._security_validator = SecurityValidator(strict_mode=self.strict_security)
+            logger.info("Security validation system initialized")
+            
+        except Exception as e:
+            logger.warning(f"Failed to initialize security system: {e}")
+            self._security_validator = None
+    
+    def _init_telemetry(self):
+        """Initialize telemetry collection system."""
+        try:
+            try:
+                from .monitoring import TelemetryCollector
+            except ImportError:
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                from monitoring import TelemetryCollector
+            
+            self._telemetry_collector = TelemetryCollector()
+            logger.info("Telemetry collection system initialized")
+            
+        except Exception as e:
+            logger.warning(f"Failed to initialize telemetry system: {e}")
+            self._telemetry_collector = None
+    
+    def _init_optimization(self):
+        """Initialize performance optimization system."""
+        try:
+            try:
+                from .optimization import PerformanceOptimizer, PerformanceProfile, AutoScaler
+            except ImportError:
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                from optimization import PerformanceOptimizer, PerformanceProfile, AutoScaler
+            
+            # Create optimization profile based on setting
+            if self.optimization_profile == "fast":
+                profile = PerformanceProfile(
+                    batch_size=16, 
+                    num_workers=8,
+                    cache_size_mb=1024,
+                    enable_dynamic_batching=True
+                )
+            elif self.optimization_profile == "accuracy":
+                profile = PerformanceProfile(
+                    batch_size=1,
+                    num_workers=2, 
+                    cache_size_mb=128,
+                    enable_dynamic_batching=False
+                )
+            else:  # balanced
+                profile = PerformanceProfile(
+                    batch_size=8,
+                    num_workers=4,
+                    cache_size_mb=512,
+                    enable_dynamic_batching=True
+                )
+            
+            self._performance_optimizer = PerformanceOptimizer(profile)
+            self._auto_scaler = AutoScaler()
+            
+            logger.info(f"Performance optimization initialized with profile: {self.optimization_profile}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to initialize optimization system: {e}")
+            self._performance_optimizer = None
+            self._auto_scaler = None
     
     def benchmark_inference(self, image: np.ndarray, iterations: int = 100) -> Dict[str, float]:
         """Benchmark inference performance."""

@@ -12,6 +12,19 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 
 import numpy as np
 
+# Try to import optional dependencies
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
+try:
+    import prometheus_client
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+
 # Configure structured logging
 class StructuredFormatter(logging.Formatter):
     """Structured JSON formatter for logs."""
@@ -98,30 +111,515 @@ class MetricCollector:
         self._lock = threading.Lock()
     
     def record_metric(self, name: str, value: float, tags: Dict[str, str] = None, unit: str = ""):
-        """Record a metric point."""
+        """Record a metric measurement."""
+        if tags is None:
+            tags = {}
+        
+        metric = MetricPoint(
+            timestamp=time.time(),
+            name=name,
+            value=value,
+            tags=tags,
+            unit=unit
+        )
+        
         with self._lock:
-            point = MetricPoint(
-                timestamp=time.time(),
-                name=name,
-                value=value,
-                tags=tags or {},
-                unit=unit
-            )
-            self.metrics.append(point)
+            self.metrics.append(metric)
     
-    def record_execution_time(self, operation: str, execution_time: float, 
-                            is_error: bool = False, tags: Dict[str, str] = None):
-        """Record execution time for an operation."""
+    def record_performance(self, operation: str, execution_time: float, is_error: bool = False, tags: Dict[str, str] = None):
+        """Record performance statistics."""
+        if tags is None:
+            tags = {}
+        
+        # Create key for aggregation
+        tag_key = "_".join(f"{k}:{v}" for k, v in sorted(tags.items()))
+        key = f"{operation}_{tag_key}" if tag_key else operation
+        
         with self._lock:
-            self.aggregates[operation].add_measurement(execution_time, is_error)
+            self.aggregates[key].add_measurement(execution_time, is_error)
+        
+        # Also record as individual metric
+        self.record_metric(
+            name=f"{operation}_duration",
+            value=execution_time * 1000,  # Convert to ms
+            tags={"operation": operation, **tags},
+            unit="ms"
+        )
+        
+        if is_error:
             self.record_metric(
-                f"{operation}_duration", 
-                execution_time, 
-                tags or {}, 
-                "seconds"
+                name=f"{operation}_error",
+                value=1,
+                tags={"operation": operation, **tags},
+                unit="count"
             )
-            if is_error:
-                self.record_metric(f"{operation}_error", 1, tags or {}, "count")
+    
+    def get_recent_metrics(self, minutes: int = 5) -> List[MetricPoint]:
+        """Get metrics from the last N minutes."""
+        cutoff_time = time.time() - (minutes * 60)
+        
+        with self._lock:
+            return [m for m in self.metrics if m.timestamp >= cutoff_time]
+    
+    def get_performance_stats(self, operation: str = None) -> Dict[str, PerformanceStats]:
+        """Get performance statistics."""
+        with self._lock:
+            if operation:
+                return {k: v for k, v in self.aggregates.items() if k.startswith(operation)}
+            return dict(self.aggregates)
+    
+    def clear_old_metrics(self, hours: int = 24):
+        """Clear metrics older than specified hours."""
+        cutoff_time = time.time() - (hours * 3600)
+        
+        with self._lock:
+            # Filter metrics
+            self.metrics = deque(
+                [m for m in self.metrics if m.timestamp >= cutoff_time],
+                maxlen=self.max_points
+            )
+    
+    def export_metrics(self, format: str = "json") -> Union[str, List[Dict]]:
+        """Export metrics in specified format."""
+        with self._lock:
+            metrics_data = [m.to_dict() for m in self.metrics]
+        
+        if format == "json":
+            return json.dumps(metrics_data, indent=2)
+        elif format == "list":
+            return metrics_data
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+
+
+class TelemetryCollector:
+    """Comprehensive telemetry collection for model operations."""
+    
+    def __init__(self, enable_system_metrics: bool = True, enable_prometheus: bool = False):
+        """Initialize telemetry collector.
+        
+        Args:
+            enable_system_metrics: Enable system resource monitoring
+            enable_prometheus: Enable Prometheus metrics export
+        """
+        self.enable_system_metrics = enable_system_metrics and PSUTIL_AVAILABLE
+        self.enable_prometheus = enable_prometheus and PROMETHEUS_AVAILABLE
+        
+        self.metric_collector = MetricCollector()
+        self.operation_history = deque(maxlen=1000)
+        self._lock = threading.Lock()
+        
+        # Performance tracking
+        self.active_operations = {}  # operation_id -> start_time
+        self.operation_stats = defaultdict(PerformanceStats)
+        
+        # System monitoring
+        if self.enable_system_metrics:
+            self._start_system_monitoring()
+        
+        # Prometheus metrics
+        if self.enable_prometheus:
+            self._setup_prometheus_metrics()
+        
+        self.logger = logging.getLogger(__name__)
+        self.logger.info(f"Telemetry collector initialized (system_metrics={self.enable_system_metrics}, prometheus={self.enable_prometheus})")
+    
+    def record_operation_start(self, operation_id: str, operation_type: str, user_id: str = "anonymous", metadata: Dict[str, Any] = None):
+        """Record the start of an operation."""
+        if metadata is None:
+            metadata = {}
+        
+        start_time = time.time()
+        
+        operation_record = {
+            "operation_id": operation_id,
+            "operation_type": operation_type,
+            "user_id": user_id,
+            "start_time": start_time,
+            "metadata": metadata,
+            "status": "started"
+        }
+        
+        with self._lock:
+            self.active_operations[operation_id] = operation_record
+        
+        # Record metric
+        self.metric_collector.record_metric(
+            name="operation_started",
+            value=1,
+            tags={
+                "operation_type": operation_type,
+                "user_id": user_id
+            },
+            unit="count"
+        )
+        
+        self.logger.debug(f"Operation started: {operation_id} ({operation_type})", extra={
+            "operation_id": operation_id,
+            "operation_type": operation_type,
+            "user_id": user_id
+        })
+    
+    def record_operation_success(self, operation_id: str, duration: float = None, result_metadata: Dict[str, Any] = None):
+        """Record successful completion of an operation."""
+        if result_metadata is None:
+            result_metadata = {}
+        
+        end_time = time.time()
+        
+        with self._lock:
+            if operation_id not in self.active_operations:
+                self.logger.warning(f"Operation {operation_id} not found in active operations")
+                return
+            
+            operation_record = self.active_operations.pop(operation_id)
+        
+        # Calculate duration if not provided
+        if duration is None:
+            duration = end_time - operation_record["start_time"]
+        
+        # Update operation record
+        operation_record.update({
+            "end_time": end_time,
+            "duration": duration,
+            "status": "success",
+            "result_metadata": result_metadata
+        })
+        
+        # Store in history
+        with self._lock:
+            self.operation_history.append(operation_record)
+        
+        # Record performance metrics
+        operation_type = operation_record["operation_type"]
+        user_id = operation_record["user_id"]
+        
+        self.metric_collector.record_performance(
+            operation=operation_type,
+            execution_time=duration,
+            is_error=False,
+            tags={"user_id": user_id, "status": "success"}
+        )
+        
+        # Record success metric
+        self.metric_collector.record_metric(
+            name="operation_completed",
+            value=1,
+            tags={
+                "operation_type": operation_type,
+                "user_id": user_id,
+                "status": "success"
+            },
+            unit="count"
+        )
+        
+        self.logger.info(f"Operation completed successfully: {operation_id} ({operation_type}, {duration:.3f}s)", extra={
+            "operation_id": operation_id,
+            "operation_type": operation_type,
+            "duration_ms": duration * 1000,
+            "user_id": user_id,
+            "status": "success"
+        })
+    
+    def record_operation_failure(self, operation_id: str, error: str, duration: float = None, error_metadata: Dict[str, Any] = None):
+        """Record failed operation."""
+        if error_metadata is None:
+            error_metadata = {}
+        
+        end_time = time.time()
+        
+        with self._lock:
+            if operation_id not in self.active_operations:
+                self.logger.warning(f"Operation {operation_id} not found in active operations")
+                return
+            
+            operation_record = self.active_operations.pop(operation_id)
+        
+        # Calculate duration if not provided
+        if duration is None:
+            duration = end_time - operation_record["start_time"]
+        
+        # Update operation record
+        operation_record.update({
+            "end_time": end_time,
+            "duration": duration,
+            "status": "failed",
+            "error": error,
+            "error_metadata": error_metadata
+        })
+        
+        # Store in history
+        with self._lock:
+            self.operation_history.append(operation_record)
+        
+        # Record performance metrics
+        operation_type = operation_record["operation_type"]
+        user_id = operation_record["user_id"]
+        
+        self.metric_collector.record_performance(
+            operation=operation_type,
+            execution_time=duration,
+            is_error=True,
+            tags={"user_id": user_id, "status": "failed"}
+        )
+        
+        # Record failure metric
+        self.metric_collector.record_metric(
+            name="operation_completed",
+            value=1,
+            tags={
+                "operation_type": operation_type,
+                "user_id": user_id,
+                "status": "failed"
+            },
+            unit="count"
+        )
+        
+        self.logger.error(f"Operation failed: {operation_id} ({operation_type}, {duration:.3f}s): {error}", extra={
+            "operation_id": operation_id,
+            "operation_type": operation_type,
+            "duration_ms": duration * 1000,
+            "user_id": user_id,
+            "status": "failed",
+            "error": error
+        })
+    
+    def get_operation_stats(self, operation_type: str = None, minutes: int = 60) -> Dict[str, Any]:
+        """Get aggregated operation statistics."""
+        cutoff_time = time.time() - (minutes * 60)
+        
+        with self._lock:
+            # Filter recent operations
+            recent_ops = [
+                op for op in self.operation_history
+                if op["start_time"] >= cutoff_time
+            ]
+            
+            if operation_type:
+                recent_ops = [op for op in recent_ops if op["operation_type"] == operation_type]
+        
+        if not recent_ops:
+            return {
+                "operation_type": operation_type,
+                "time_window_minutes": minutes,
+                "total_operations": 0,
+                "success_count": 0,
+                "failure_count": 0,
+                "success_rate": 0.0,
+                "avg_duration": 0.0,
+                "min_duration": 0.0,
+                "max_duration": 0.0
+            }
+        
+        # Calculate statistics
+        total_ops = len(recent_ops)
+        success_ops = [op for op in recent_ops if op["status"] == "success"]
+        failure_ops = [op for op in recent_ops if op["status"] == "failed"]
+        
+        durations = [op["duration"] for op in recent_ops if "duration" in op]
+        
+        stats = {
+            "operation_type": operation_type,
+            "time_window_minutes": minutes,
+            "total_operations": total_ops,
+            "success_count": len(success_ops),
+            "failure_count": len(failure_ops),
+            "success_rate": len(success_ops) / total_ops if total_ops > 0 else 0.0,
+        }
+        
+        if durations:
+            stats.update({
+                "avg_duration": sum(durations) / len(durations),
+                "min_duration": min(durations),
+                "max_duration": max(durations),
+                "p95_duration": np.percentile(durations, 95) if len(durations) > 1 else durations[0],
+                "p99_duration": np.percentile(durations, 99) if len(durations) > 1 else durations[0]
+            })
+        else:
+            stats.update({
+                "avg_duration": 0.0,
+                "min_duration": 0.0,
+                "max_duration": 0.0,
+                "p95_duration": 0.0,
+                "p99_duration": 0.0
+            })
+        
+        return stats
+    
+    def get_system_metrics(self) -> Dict[str, Any]:
+        """Get current system metrics."""
+        metrics = {
+            "timestamp": time.time(),
+            "system_available": self.enable_system_metrics
+        }
+        
+        if self.enable_system_metrics:
+            try:
+                # CPU metrics
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+                cpu_count = psutil.cpu_count()
+                
+                # Memory metrics
+                memory = psutil.virtual_memory()
+                
+                # Disk metrics
+                disk = psutil.disk_usage('/')
+                
+                # Network metrics (if available)
+                try:
+                    net_io = psutil.net_io_counters()
+                    network_metrics = {
+                        "bytes_sent": net_io.bytes_sent,
+                        "bytes_recv": net_io.bytes_recv,
+                        "packets_sent": net_io.packets_sent,
+                        "packets_recv": net_io.packets_recv
+                    }
+                except AttributeError:
+                    network_metrics = {}
+                
+                metrics.update({
+                    "cpu": {
+                        "percent": cpu_percent,
+                        "count": cpu_count,
+                        "load_avg": os.getloadavg() if hasattr(os, 'getloadavg') else None
+                    },
+                    "memory": {
+                        "total_bytes": memory.total,
+                        "available_bytes": memory.available,
+                        "used_bytes": memory.used,
+                        "percent": memory.percent
+                    },
+                    "disk": {
+                        "total_bytes": disk.total,
+                        "free_bytes": disk.free,
+                        "used_bytes": disk.used,
+                        "percent": (disk.used / disk.total) * 100
+                    },
+                    "network": network_metrics
+                })
+                
+            except Exception as e:
+                self.logger.warning(f"Failed to collect system metrics: {e}")
+                metrics["error"] = str(e)
+        
+        return metrics
+    
+    def _start_system_monitoring(self):
+        """Start background system monitoring thread."""
+        def monitor_system():
+            while True:
+                try:
+                    metrics = self.get_system_metrics()
+                    
+                    # Record system metrics
+                    if "cpu" in metrics:
+                        self.metric_collector.record_metric(
+                            name="system_cpu_percent",
+                            value=metrics["cpu"]["percent"],
+                            unit="percent"
+                        )
+                    
+                    if "memory" in metrics:
+                        self.metric_collector.record_metric(
+                            name="system_memory_percent",
+                            value=metrics["memory"]["percent"],
+                            unit="percent"
+                        )
+                        
+                        self.metric_collector.record_metric(
+                            name="system_memory_used",
+                            value=metrics["memory"]["used_bytes"] / (1024**3),  # GB
+                            unit="GB"
+                        )
+                    
+                    if "disk" in metrics:
+                        self.metric_collector.record_metric(
+                            name="system_disk_percent",
+                            value=metrics["disk"]["percent"],
+                            unit="percent"
+                        )
+                    
+                    # Clean up stale operations
+                    self.cleanup_stale_operations()
+                    
+                    time.sleep(30)  # Monitor every 30 seconds
+                    
+                except Exception as e:
+                    self.logger.error(f"System monitoring error: {e}")
+                    time.sleep(60)  # Wait longer on error
+        
+        monitor_thread = threading.Thread(target=monitor_system, daemon=True)
+        monitor_thread.start()
+        self.logger.info("System monitoring thread started")
+    
+    def cleanup_stale_operations(self, timeout_seconds: int = 300):
+        """Clean up operations that have been active too long."""
+        current_time = time.time()
+        stale_ops = []
+        
+        with self._lock:
+            for op_id, operation in list(self.active_operations.items()):
+                if current_time - operation["start_time"] > timeout_seconds:
+                    stale_ops.append(op_id)
+                    operation["status"] = "timeout"
+                    operation["end_time"] = current_time
+                    operation["duration"] = current_time - operation["start_time"]
+                    
+                    # Move to history
+                    self.operation_history.append(operation)
+                    del self.active_operations[op_id]
+        
+        if stale_ops:
+            self.logger.warning(f"Cleaned up {len(stale_ops)} stale operations: {stale_ops}")
+        
+        return stale_ops
+
+
+# Example usage and testing
+if __name__ == "__main__":
+    print("Testing monitoring modules...")
+    
+    # Test metric collector
+    print("Testing MetricCollector...")
+    collector = MetricCollector()
+    
+    # Record some metrics
+    collector.record_metric("test_metric", 42.0, {"type": "test"}, "units")
+    collector.record_performance("test_operation", 0.150, False, {"user": "test"})
+    collector.record_performance("test_operation", 0.200, True, {"user": "test"})
+    
+    # Get statistics
+    stats = collector.get_performance_stats("test_operation")
+    print(f"Performance stats: {len(stats)} operations tracked")
+    
+    metrics = collector.get_recent_metrics(5)
+    print(f"Recent metrics: {len(metrics)} metrics")
+    
+    print("✓ MetricCollector works")
+    
+    # Test telemetry collector
+    print("\nTesting TelemetryCollector...")
+    telemetry = TelemetryCollector(enable_system_metrics=PSUTIL_AVAILABLE)
+    
+    # Simulate operations
+    telemetry.record_operation_start("op1", "generate_caption", "test_user")
+    time.sleep(0.1)
+    telemetry.record_operation_success("op1", result_metadata={"caption_length": 25})
+    
+    telemetry.record_operation_start("op2", "extract_text", "test_user")
+    time.sleep(0.05)
+    telemetry.record_operation_failure("op2", "Mock error for testing")
+    
+    # Get statistics
+    operation_stats = telemetry.get_operation_stats("generate_caption")
+    print(f"Operation stats: {operation_stats['total_operations']} operations, {operation_stats['success_rate']:.2%} success rate")
+    
+    system_metrics = telemetry.get_system_metrics()
+    print(f"System metrics available: {system_metrics['system_available']}")
+    
+    print("✓ TelemetryCollector works")
+    
+    print("\nAll monitoring tests passed!")
     
     def get_metrics(self, name_filter: str = None, 
                    time_range: Tuple[float, float] = None) -> List[MetricPoint]:

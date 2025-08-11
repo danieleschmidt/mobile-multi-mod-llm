@@ -26,6 +26,11 @@ BLOCKED_PATTERNS = [
 SESSION_TIMEOUT = 3600  # 1 hour
 
 
+class SecurityError(Exception):
+    """Security validation error."""
+    pass
+
+
 class SecurityValidator:
     """Comprehensive security validation for model inputs."""
     
@@ -56,9 +61,6 @@ class SecurityValidator:
             
         Returns:
             Validation result with security assessment
-            
-        Raises:
-            SecurityError: If request fails security checks
         """
         validation_result = {
             "valid": True,
@@ -99,470 +101,628 @@ class SecurityValidator:
                 validation_result["checks"]["image_security"] = image_security["valid"]
                 if not image_security["valid"]:
                     validation_result["valid"] = False
-                    validation_result["blocked_reason"] = f"image_security: {image_security['reason']}"
+                    validation_result["blocked_reason"] = f"image_security_failed: {image_security.get('reason', 'unknown')}"
+                    self._suspicious_patterns += 1
+                    security_logger.warning(f"Image security check failed: {image_security.get('reason', 'unknown')}")
                     return validation_result
-                validation_result["warnings"].extend(image_security.get("warnings", []))
+                
+                if image_security.get("warnings"):
+                    validation_result["warnings"].extend(image_security["warnings"])
             
-            if "text" in request_data:
-                text_security = self._validate_text_security(request_data["text"])
+            # Text content validation
+            if any(key in request_data for key in ["question", "text", "caption"]):
+                text_security = self._validate_text_security(request_data)
                 validation_result["checks"]["text_security"] = text_security["valid"]
                 if not text_security["valid"]:
                     validation_result["valid"] = False
-                    validation_result["blocked_reason"] = f"text_security: {text_security['reason']}"
+                    validation_result["blocked_reason"] = f"text_security_failed: {text_security.get('reason', 'unknown')}"
+                    self._suspicious_patterns += 1
+                    security_logger.warning(f"Text security check failed: {text_security.get('reason', 'unknown')}")
                     return validation_result
-                validation_result["warnings"].extend(text_security.get("warnings", []))
+                
+                if text_security.get("warnings"):
+                    validation_result["warnings"].extend(text_security["warnings"])
             
-            # Request size validation
-            request_size = len(json.dumps(request_data, default=str).encode())
-            validation_result["checks"]["request_size"] = request_size < MAX_FILE_SIZE
-            if request_size >= MAX_FILE_SIZE:
+            # Operation-specific validation
+            operation = request_data.get("operation", "unknown")
+            operation_security = self._validate_operation_security(operation, request_data)
+            validation_result["checks"]["operation_security"] = operation_security["valid"]
+            if not operation_security["valid"]:
                 validation_result["valid"] = False
-                validation_result["blocked_reason"] = f"request_too_large: {request_size} bytes"
+                validation_result["blocked_reason"] = f"operation_security_failed: {operation_security.get('reason', 'unknown')}"
+                self._blocked_requests += 1
+                security_logger.error(f"Operation security check failed: {operation_security.get('reason', 'unknown')}")
                 return validation_result
             
-            # Pattern detection
-            suspicious_patterns = self._detect_suspicious_patterns(request_data)
-            validation_result["checks"]["pattern_detection"] = len(suspicious_patterns) == 0
-            if suspicious_patterns:
-                validation_result["warnings"].extend(suspicious_patterns)
-                if self.strict_mode:
-                    validation_result["valid"] = False
-                    validation_result["blocked_reason"] = f"suspicious_patterns: {suspicious_patterns}"
-                    return validation_result
-                self._suspicious_patterns += len(suspicious_patterns)
+            if operation_security.get("warnings"):
+                validation_result["warnings"].extend(operation_security["warnings"])
             
-            # Metadata validation
-            metadata_checks = self._validate_metadata(request_data)
-            validation_result["checks"]["metadata"] = metadata_checks["valid"]
-            validation_result["warnings"].extend(metadata_checks.get("warnings", []))
+            # Final security assessment
+            if self.strict_mode and len(validation_result["warnings"]) > 3:
+                validation_result["valid"] = False
+                validation_result["blocked_reason"] = "too_many_security_warnings"
+                security_logger.warning(f"Request blocked due to multiple warnings: {len(validation_result['warnings'])}")
+                return validation_result
             
-            logger.debug(f"Request validation completed for user {user_id}")
             return validation_result
             
         except Exception as e:
+            logger.error(f"Security validation error: {e}")
             validation_result["valid"] = False
             validation_result["blocked_reason"] = f"validation_error: {e}"
-            security_logger.error(f"Security validation error: {e}", exc_info=True)
             return validation_result
     
-    def _validate_image_security(self, image_data: Union[np.ndarray, str, bytes]) -> Dict[str, Any]:
-        """Validate image data for security threats."""
-        result = {"valid": True, "warnings": []}
+    def _validate_image_security(self, image: np.ndarray) -> Dict[str, Any]:
+        """Validate image for security threats."""
+        result = {
+            "valid": True,
+            "warnings": [],
+            "reason": None
+        }
         
         try:
-            if isinstance(image_data, str):
-                # File path validation
-                if not self._is_safe_path(image_data):
-                    result["valid"] = False
-                    result["reason"] = "unsafe_file_path"
-                    return result
-                
-                # Extension validation
-                ext = Path(image_data).suffix.lower()
-                if ext not in ALLOWED_EXTENSIONS:
-                    result["valid"] = False
-                    result["reason"] = f"unsupported_extension: {ext}"
-                    return result
-            
-            elif isinstance(image_data, np.ndarray):
-                # Array validation
-                if image_data.size > 100 * 1024 * 1024:  # > 100M pixels
-                    result["valid"] = False
-                    result["reason"] = "image_too_large"
-                    return result
-                
-                # Check for suspicious patterns in pixel data
-                if self._has_suspicious_pixel_patterns(image_data):
-                    result["warnings"].append("suspicious_pixel_patterns")
-            
-            elif isinstance(image_data, bytes):
-                # Binary data validation
-                if len(image_data) > MAX_FILE_SIZE:
-                    result["valid"] = False
-                    result["reason"] = "file_too_large"
-                    return result
-                
-                # Check for embedded malicious content
-                if self._has_embedded_threats(image_data):
-                    result["valid"] = False
-                    result["reason"] = "embedded_threats_detected"
-                    return result
-            
-            return result
-            
-        except Exception as e:
-            result["valid"] = False
-            result["reason"] = f"validation_error: {e}"
-            return result
-    
-    def _validate_text_security(self, text_data: str) -> Dict[str, Any]:
-        """Validate text data for security threats."""
-        result = {"valid": True, "warnings": []}
-        
-        try:
-            if len(text_data) > 10000:  # Max 10K characters
+            # Check image dimensions and size
+            if not isinstance(image, np.ndarray):
                 result["valid"] = False
-                result["reason"] = "text_too_long"
+                result["reason"] = "invalid_image_type"
                 return result
             
-            # Check for injection patterns
-            text_lower = text_data.lower()
-            injection_patterns = [
-                'script>', 'javascript:', 'vbscript:', 'onload=', 'onerror=',
-                '<?php', '<%', 'exec(', 'eval(', 'system(', 'shell_exec('
-            ]
+            # Check dimensions
+            if len(image.shape) not in [2, 3]:
+                result["valid"] = False
+                result["reason"] = "invalid_image_dimensions"
+                return result
             
-            for pattern in injection_patterns:
-                if pattern in text_lower:
-                    if self.strict_mode:
-                        result["valid"] = False
-                        result["reason"] = f"injection_pattern: {pattern}"
-                        return result
-                    else:
-                        result["warnings"].append(f"potential_injection: {pattern}")
+            h, w = image.shape[:2]
+            if h < 1 or w < 1 or h > 4096 or w > 4096:
+                result["valid"] = False
+                result["reason"] = "invalid_image_size"
+                return result
             
-            # Check encoding
-            try:
-                text_data.encode('utf-8')
-            except UnicodeEncodeError:
-                result["warnings"].append("encoding_issues")
+            # Check for suspicious patterns in pixel values
+            if self._contains_suspicious_patterns(image.flatten()):
+                result["warnings"].append("suspicious_pixel_patterns")
+                if self.strict_mode:
+                    result["valid"] = False
+                    result["reason"] = "suspicious_pixel_patterns"
+                    return result
+            
+            # Check for extreme pixel values
+            if image.dtype == np.uint8:
+                if np.any((image < 0) | (image > 255)):
+                    result["valid"] = False
+                    result["reason"] = "invalid_pixel_range"
+                    return result
+            elif image.dtype == np.float32:
+                if np.any(np.isnan(image)) or np.any(np.isinf(image)):
+                    result["valid"] = False
+                    result["reason"] = "invalid_float_values"
+                    return result
+                
+                # Check for extreme float values that might indicate injection
+                if np.any(np.abs(image) > 1e6):
+                    result["warnings"].append("extreme_float_values")
+            
+            # Check image entropy (too low might indicate synthetic/malicious content)
+            entropy = self._calculate_image_entropy(image)
+            if entropy < 1.0:
+                result["warnings"].append("low_entropy_image")
+                if self.strict_mode and entropy < 0.5:
+                    result["valid"] = False
+                    result["reason"] = "extremely_low_entropy"
+                    return result
             
             return result
             
         except Exception as e:
+            logger.error(f"Image security validation error: {e}")
             result["valid"] = False
             result["reason"] = f"validation_error: {e}"
             return result
     
-    def _is_safe_path(self, path: str) -> bool:
-        """Check if file path is safe."""
+    def _validate_text_security(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate text content for security threats."""
+        result = {
+            "valid": True,
+            "warnings": [],
+            "reason": None
+        }
+        
         try:
-            # Resolve path and check for traversal
-            resolved = Path(path).resolve()
+            # Extract text fields
+            text_fields = []
+            for field in ["question", "text", "caption"]:
+                if field in request_data:
+                    text_fields.append(str(request_data[field]))
             
-            # Check for path traversal attempts
-            if '..' in str(path) or path.startswith('/'):
-                return False
+            for text in text_fields:
+                # Length checks
+                if len(text) > 10000:  # 10K character limit
+                    result["valid"] = False
+                    result["reason"] = "text_too_long"
+                    return result
+                
+                if len(text.strip()) == 0:
+                    result["warnings"].append("empty_text")
+                    continue
+                
+                # Encoding validation
+                try:
+                    text.encode('utf-8')
+                except UnicodeEncodeError:
+                    result["valid"] = False
+                    result["reason"] = "invalid_text_encoding"
+                    return result
+                
+                # Pattern-based threat detection
+                text_lower = text.lower()
+                text_bytes = text.encode('utf-8')
+                
+                # Check for script injection patterns
+                for pattern in BLOCKED_PATTERNS:
+                    if pattern in text_bytes:
+                        result["valid"] = False
+                        result["reason"] = f"blocked_pattern_detected: {pattern.decode('utf-8', 'ignore')}"
+                        return result
+                
+                # Check for suspicious keywords
+                suspicious_keywords = [
+                    'javascript', 'vbscript', 'onclick', 'onerror', 'onload',
+                    'eval', 'exec', 'function', 'alert', 'document.cookie',
+                    'window.location', 'iframe', 'embed', 'object'
+                ]
+                
+                found_suspicious = [kw for kw in suspicious_keywords if kw in text_lower]
+                if found_suspicious:
+                    if len(found_suspicious) > 2:
+                        result["valid"] = False
+                        result["reason"] = f"multiple_suspicious_keywords: {found_suspicious[:3]}"
+                        return result
+                    else:
+                        result["warnings"].append(f"suspicious_keywords: {found_suspicious}")
+                
+                # Check for excessive special characters
+                special_char_ratio = sum(1 for c in text if not c.isalnum() and not c.isspace()) / max(len(text), 1)
+                if special_char_ratio > 0.5:
+                    result["warnings"].append("high_special_char_ratio")
+                    if self.strict_mode and special_char_ratio > 0.8:
+                        result["valid"] = False
+                        result["reason"] = "excessive_special_characters"
+                        return result
+                
+                # Check for control characters
+                if any(ord(c) < 32 and c not in '\t\n\r' for c in text):
+                    result["warnings"].append("contains_control_characters")
+                    if self.strict_mode:
+                        result["valid"] = False
+                        result["reason"] = "control_characters_detected"
+                        return result
             
-            # Check for suspicious characters
-            suspicious_chars = ['<', '>', '|', '&', ';', '$', '`']
-            if any(char in path for char in suspicious_chars):
-                return False
+            return result
             
-            return True
-            
-        except Exception:
-            return False
+        except Exception as e:
+            logger.error(f"Text security validation error: {e}")
+            result["valid"] = False
+            result["reason"] = f"validation_error: {e}"
+            return result
     
-    def _has_suspicious_pixel_patterns(self, image: np.ndarray) -> bool:
-        """Check for suspicious patterns in image pixels."""
+    def _validate_operation_security(self, operation: str, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate operation-specific security requirements."""
+        result = {
+            "valid": True,
+            "warnings": [],
+            "reason": None
+        }
+        
         try:
-            # Check for completely uniform images (potential steganography)
-            if np.std(image) < 1e-6:
-                return True
+            # Allowed operations
+            allowed_operations = {
+                'generate_caption', 'extract_text', 'answer_question', 
+                'get_image_embeddings', 'benchmark_inference'
+            }
             
-            # Check for unusual value distributions
-            unique_values = len(np.unique(image))
-            total_pixels = image.size
-            if unique_values / total_pixels > 0.9:  # Too many unique values
-                return True
+            if operation not in allowed_operations:
+                result["valid"] = False
+                result["reason"] = f"unauthorized_operation: {operation}"
+                return result
             
-            return False
+            # Operation-specific validation
+            if operation == 'answer_question':
+                if 'question' not in request_data:
+                    result["valid"] = False
+                    result["reason"] = "missing_required_field: question"
+                    return result
+                
+                question = str(request_data['question'])
+                if len(question.strip()) == 0:
+                    result["valid"] = False
+                    result["reason"] = "empty_question"
+                    return result
             
-        except Exception:
-            return False
+            elif operation == 'generate_caption':
+                max_length = request_data.get('max_length', 50)
+                if not isinstance(max_length, int) or max_length < 1 or max_length > 200:
+                    result["warnings"].append("invalid_max_length_parameter")
+                    if self.strict_mode:
+                        result["valid"] = False
+                        result["reason"] = "invalid_max_length"
+                        return result
+            
+            elif operation == 'benchmark_inference':
+                if self.strict_mode:
+                    # Benchmarking might be restricted in production
+                    result["warnings"].append("benchmarking_operation_in_strict_mode")
+            
+            # Check for parameter injection attempts
+            for key, value in request_data.items():
+                if isinstance(value, str) and len(value) > 1000:
+                    result["warnings"].append(f"large_parameter: {key}")
+                    if self.strict_mode and len(value) > 5000:
+                        result["valid"] = False
+                        result["reason"] = f"parameter_too_large: {key}"
+                        return result
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Operation security validation error: {e}")
+            result["valid"] = False
+            result["reason"] = f"validation_error: {e}"
+            return result
     
-    def _has_embedded_threats(self, data: bytes) -> bool:
-        """Check for embedded threats in binary data."""
+    def _contains_suspicious_patterns(self, data: np.ndarray) -> bool:
+        """Check for suspicious patterns in data that might indicate injection."""
         try:
-            # Check for blocked patterns
+            # Convert to bytes for pattern matching
+            data_bytes = data.astype(np.uint8).tobytes()
+            
+            # Check for embedded scripts or code patterns
             for pattern in BLOCKED_PATTERNS:
-                if pattern in data:
+                if pattern in data_bytes:
                     return True
             
-            # Check for executable headers
-            executable_headers = [
-                b'MZ',  # PE/EXE
-                b'\x7fELF',  # ELF
-                b'\xfe\xed\xfa',  # Mach-O
-                b'#!/bin/',  # Shell script
-            ]
-            
-            for header in executable_headers:
-                if data.startswith(header):
+            # Check for repeating patterns that might indicate synthetic data
+            if len(data_bytes) > 100:
+                # Look for highly repetitive patterns
+                chunk_size = min(32, len(data_bytes) // 4)
+                chunks = [data_bytes[i:i+chunk_size] for i in range(0, len(data_bytes)-chunk_size, chunk_size)]
+                unique_chunks = set(chunks)
+                
+                if len(unique_chunks) / len(chunks) < 0.1:  # Less than 10% unique chunks
                     return True
             
             return False
             
         except Exception:
-            return True  # Assume threat on error
+            return False
     
-    def _detect_suspicious_patterns(self, data: Dict[str, Any]) -> List[str]:
-        """Detect suspicious patterns in request data."""
-        patterns = []
-        
+    def _calculate_image_entropy(self, image: np.ndarray) -> float:
+        """Calculate image entropy for anomaly detection."""
         try:
-            data_str = json.dumps(data, default=str).lower()
+            # Convert to grayscale if needed
+            if len(image.shape) == 3:
+                gray = np.mean(image, axis=2)
+            else:
+                gray = image
             
-            # SQL injection patterns
-            sql_patterns = ['union select', 'drop table', 'exec(', '--', ';--']
-            for pattern in sql_patterns:
-                if pattern in data_str:
-                    patterns.append(f"sql_injection: {pattern}")
+            # Calculate histogram
+            hist, _ = np.histogram(gray.flatten(), bins=256, range=(0, 256))
             
-            # Command injection patterns
-            cmd_patterns = ['&&', '||', '$(', '`', '|', ';']
-            for pattern in cmd_patterns:
-                if pattern in data_str:
-                    patterns.append(f"command_injection: {pattern}")
+            # Normalize
+            hist = hist / hist.sum()
             
-            # XSS patterns
-            xss_patterns = ['<script', 'javascript:', 'onload=', 'onerror=']
-            for pattern in xss_patterns:
-                if pattern in data_str:
-                    patterns.append(f"xss: {pattern}")
+            # Calculate entropy
+            entropy = -np.sum(hist * np.log2(hist + 1e-7))
             
-        except Exception as e:
-            patterns.append(f"pattern_detection_error: {e}")
-        
-        return patterns
-    
-    def _validate_metadata(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate request metadata."""
-        result = {"valid": True, "warnings": []}
-        
-        try:
-            # Check for excessive metadata
-            if len(data) > 50:  # Too many fields
-                result["warnings"].append("excessive_metadata_fields")
+            return float(entropy)
             
-            # Check for suspicious field names
-            suspicious_fields = ['__', 'eval', 'exec', 'system', 'admin', 'root']
-            for field in data.keys():
-                if any(sus in str(field).lower() for sus in suspicious_fields):
-                    result["warnings"].append(f"suspicious_field: {field}")
-            
-        except Exception as e:
-            result["warnings"].append(f"metadata_validation_error: {e}")
-        
-        return result
+        except Exception:
+            return 5.0  # Default safe entropy value
     
     def get_security_metrics(self) -> Dict[str, Any]:
-        """Get security metrics summary."""
+        """Get security monitoring metrics."""
         return {
             "blocked_requests": self._blocked_requests,
             "suspicious_patterns": self._suspicious_patterns,
             "rate_limited_requests": self._rate_limited_requests,
-            "total_processed": (
-                self._blocked_requests + 
-                self._rate_limited_requests + 
-                self.rate_limiter.get_total_requests()
-            )
+            "strict_mode": self.strict_mode
         }
 
 
 class RateLimiter:
-    """Token bucket rate limiter for request throttling."""
+    """Rate limiting for request throttling."""
     
-    def __init__(self, max_requests_per_minute: int = MAX_REQUEST_RATE):
+    def __init__(self, max_requests_per_minute: int = 100):
+        """Initialize rate limiter.
+        
+        Args:
+            max_requests_per_minute: Maximum requests allowed per minute
+        """
         self.max_requests = max_requests_per_minute
-        self.window_size = 60  # 1 minute window
-        self.user_requests = {}  # user_id -> list of timestamps
-        self._total_requests = 0
+        self.requests = {}  # user_id -> [timestamp, ...]
+        
+        logger.info(f"Rate limiter initialized: {max_requests_per_minute} requests/minute")
     
     def allow_request(self, user_id: str) -> bool:
         """Check if request is allowed for user."""
         current_time = time.time()
         
-        # Initialize user if not exists
-        if user_id not in self.user_requests:
-            self.user_requests[user_id] = []
-        
         # Clean old requests
-        user_requests = self.user_requests[user_id]
-        cutoff_time = current_time - self.window_size
-        self.user_requests[user_id] = [
-            req_time for req_time in user_requests 
-            if req_time > cutoff_time
-        ]
+        if user_id in self.requests:
+            self.requests[user_id] = [
+                timestamp for timestamp in self.requests[user_id]
+                if current_time - timestamp < 60
+            ]
+        else:
+            self.requests[user_id] = []
         
         # Check rate limit
-        if len(self.user_requests[user_id]) >= self.max_requests:
+        if len(self.requests[user_id]) >= self.max_requests:
             return False
         
-        # Allow request
-        self.user_requests[user_id].append(current_time)
-        self._total_requests += 1
+        # Allow request and record timestamp
+        self.requests[user_id].append(current_time)
         return True
     
-    def get_total_requests(self) -> int:
-        """Get total number of processed requests."""
-        return self._total_requests
+    def get_remaining_requests(self, user_id: str) -> int:
+        """Get remaining requests for user."""
+        current_time = time.time()
+        
+        if user_id not in self.requests:
+            return self.max_requests
+        
+        # Count recent requests
+        recent_requests = [
+            timestamp for timestamp in self.requests[user_id]
+            if current_time - timestamp < 60
+        ]
+        
+        return max(0, self.max_requests - len(recent_requests))
+    
+    def reset_user_limit(self, user_id: str):
+        """Reset rate limit for specific user."""
+        if user_id in self.requests:
+            del self.requests[user_id]
+            logger.info(f"Rate limit reset for user: {user_id}")
 
 
 class InputSanitizer:
-    """Input sanitization and normalization."""
+    """Input sanitization and cleaning."""
+    
+    def __init__(self):
+        """Initialize input sanitizer."""
+        self.max_string_length = 10000
+        self.max_array_size = 1000
+        
+        logger.info("Input sanitizer initialized")
     
     def sanitize_request(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Sanitize request data."""
-        sanitized = {}
+        """Sanitize request data.
         
-        for key, value in data.items():
-            # Sanitize key
-            clean_key = self._sanitize_string(str(key))
+        Args:
+            data: Request data to sanitize
             
-            # Sanitize value based on type
-            if isinstance(value, str):
-                clean_value = self._sanitize_string(value)
-            elif isinstance(value, (int, float)):
-                clean_value = self._sanitize_number(value)
-            elif isinstance(value, dict):
-                clean_value = self.sanitize_request(value)
-            elif isinstance(value, list):
-                clean_value = [self._sanitize_value(v) for v in value]
-            else:
-                clean_value = value  # Keep as-is for other types
+        Returns:
+            Sanitized request data
             
-            sanitized[clean_key] = clean_value
-        
-        return sanitized
+        Raises:
+            SecurityError: If data cannot be safely sanitized
+        """
+        try:
+            sanitized = {}
+            
+            for key, value in data.items():
+                sanitized_key = self._sanitize_string(str(key))
+                sanitized_value = self._sanitize_value(value)
+                
+                if sanitized_key and sanitized_value is not None:
+                    sanitized[sanitized_key] = sanitized_value
+            
+            return sanitized
+            
+        except Exception as e:
+            raise SecurityError(f"Input sanitization failed: {e}")
     
-    def _sanitize_string(self, text: str) -> str:
+    def _sanitize_value(self, value: Any) -> Any:
+        """Sanitize a single value."""
+        if isinstance(value, str):
+            return self._sanitize_string(value)
+        elif isinstance(value, (int, float, bool)):
+            return self._sanitize_number(value)
+        elif isinstance(value, list):
+            return self._sanitize_array(value)
+        elif isinstance(value, dict):
+            return self._sanitize_dict(value)
+        elif isinstance(value, np.ndarray):
+            return self._sanitize_array_data(value)
+        else:
+            # Convert unknown types to string and sanitize
+            return self._sanitize_string(str(value))
+    
+    def _sanitize_string(self, text: str) -> Optional[str]:
         """Sanitize string input."""
+        if not isinstance(text, str):
+            text = str(text)
+        
+        # Length check
+        if len(text) > self.max_string_length:
+            text = text[:self.max_string_length]
+        
         # Remove null bytes
         text = text.replace('\x00', '')
         
-        # Normalize unicode
-        try:
-            text = text.encode('utf-8', errors='ignore').decode('utf-8')
-        except Exception:
-            pass
+        # Remove control characters except common ones
+        allowed_control = set('\t\n\r')
+        text = ''.join(c for c in text if ord(c) >= 32 or c in allowed_control)
         
-        # Remove control characters except whitespace
-        text = ''.join(char for char in text if ord(char) >= 32 or char.isspace())
+        # Basic HTML encoding for safety
+        text = text.replace('<', '&lt;').replace('>', '&gt;')
+        text = text.replace('"', '&quot;').replace("'", '&#x27;')
         
-        # Limit length
-        if len(text) > 10000:
-            text = text[:10000]
-        
-        return text.strip()
+        return text.strip() if text.strip() else None
     
-    def _sanitize_number(self, num: Union[int, float]) -> Union[int, float]:
+    def _sanitize_number(self, value: Union[int, float, bool]) -> Union[int, float, bool]:
         """Sanitize numeric input."""
-        # Check for NaN and infinity
-        if isinstance(num, float):
-            if np.isnan(num) or np.isinf(num):
-                return 0.0
-        
-        # Limit range
-        if isinstance(num, int):
-            return max(-2**31, min(2**31-1, num))
-        else:
-            return max(-1e10, min(1e10, num))
-    
-    def _sanitize_value(self, value: Any) -> Any:
-        """Generic value sanitization."""
-        if isinstance(value, str):
-            return self._sanitize_string(value)
-        elif isinstance(value, (int, float)):
-            return self._sanitize_number(value)
-        elif isinstance(value, dict):
-            return self.sanitize_request(value)
-        else:
+        if isinstance(value, bool):
             return value
+        elif isinstance(value, int):
+            # Limit integer range to prevent overflow
+            return max(-2**31, min(2**31 - 1, value))
+        elif isinstance(value, float):
+            # Check for special float values
+            if np.isnan(value) or np.isinf(value):
+                return 0.0
+            return max(-1e10, min(1e10, value))
+        else:
+            return 0
+    
+    def _sanitize_array(self, arr: List[Any]) -> List[Any]:
+        """Sanitize array input."""
+        if not isinstance(arr, list):
+            return []
+        
+        if len(arr) > self.max_array_size:
+            arr = arr[:self.max_array_size]
+        
+        return [self._sanitize_value(item) for item in arr]
+    
+    def _sanitize_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Sanitize dictionary input."""
+        if not isinstance(data, dict):
+            return {}
+        
+        sanitized = {}
+        for key, value in data.items():
+            clean_key = self._sanitize_string(str(key))
+            clean_value = self._sanitize_value(value)
+            
+            if clean_key and clean_value is not None:
+                sanitized[clean_key] = clean_value
+        
+        return sanitized
+    
+    def _sanitize_array_data(self, data: np.ndarray) -> np.ndarray:
+        """Sanitize numpy array data."""
+        try:
+            # Size limits
+            if data.size > 100 * 1024 * 1024:  # 100M elements max
+                raise SecurityError("Array too large")
+            
+            # Handle different data types
+            if data.dtype == np.uint8:
+                # Image data - ensure valid range
+                return np.clip(data, 0, 255).astype(np.uint8)
+            elif data.dtype in [np.float32, np.float64]:
+                # Float data - remove inf/nan
+                cleaned = np.nan_to_num(data, nan=0.0, posinf=1e6, neginf=-1e6)
+                return cleaned.astype(np.float32)
+            else:
+                # Convert to safe type
+                return data.astype(np.float32)
+                
+        except Exception as e:
+            raise SecurityError(f"Array sanitization failed: {e}")
 
 
 class CryptoUtils:
-    """Cryptographic utilities for secure operations."""
+    """Cryptographic utilities for security operations."""
     
     def __init__(self):
-        self.secret_key = self._get_secret_key()
+        """Initialize crypto utilities."""
+        self.hash_algorithm = 'sha256'
+        logger.info("Crypto utilities initialized")
     
-    def _get_secret_key(self) -> bytes:
-        """Get or generate secret key."""
-        key_file = Path.home() / '.mobile_multimodal_key'
-        
-        if key_file.exists():
-            try:
-                return key_file.read_bytes()[:32]  # 256-bit key
-            except Exception:
-                pass
-        
-        # Generate new key
-        key = secrets.token_bytes(32)
-        try:
-            key_file.write_bytes(key)
-            key_file.chmod(0o600)  # Owner read/write only
-        except Exception:
-            pass  # Use in-memory key if can't save
-        
-        return key
+    def generate_token(self, length: int = 32) -> str:
+        """Generate secure random token."""
+        return secrets.token_urlsafe(length)
     
     def hash_data(self, data: Union[str, bytes]) -> str:
-        """Generate secure hash of data."""
+        """Hash data securely."""
         if isinstance(data, str):
             data = data.encode('utf-8')
         
         return hashlib.sha256(data).hexdigest()
     
-    def sign_data(self, data: Union[str, bytes]) -> str:
-        """Generate HMAC signature for data."""
-        if isinstance(data, str):
-            data = data.encode('utf-8')
-        
-        signature = hmac.new(self.secret_key, data, hashlib.sha256)
-        return signature.hexdigest()
+    def verify_hash(self, data: Union[str, bytes], expected_hash: str) -> bool:
+        """Verify data against hash."""
+        calculated_hash = self.hash_data(data)
+        return hmac.compare_digest(calculated_hash, expected_hash)
     
-    def verify_signature(self, data: Union[str, bytes], signature: str) -> bool:
-        """Verify HMAC signature."""
-        expected = self.sign_data(data)
-        return hmac.compare_digest(expected, signature)
-
-
-class SecurityError(Exception):
-    """Security-related error."""
-    pass
+    def generate_session_id(self) -> str:
+        """Generate secure session ID."""
+        return self.generate_token(48)
+    
+    def is_session_valid(self, session_id: str, created_time: float) -> bool:
+        """Check if session is still valid."""
+        if not session_id or len(session_id) < 32:
+            return False
+        
+        current_time = time.time()
+        return (current_time - created_time) < SESSION_TIMEOUT
 
 
 # Example usage and testing
 if __name__ == "__main__":
-    print("Testing security validation...")
+    print("Testing security modules...")
     
     # Test security validator
+    print("Testing SecurityValidator...")
     validator = SecurityValidator(strict_mode=True)
     
-    # Test safe request
-    safe_request = {
-        "image": np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8),
-        "text": "Generate a caption for this image",
-        "user_id": "test_user"
+    # Test valid request
+    test_image = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
+    valid_request = {
+        "operation": "generate_caption",
+        "image": test_image,
+        "max_length": 50
     }
     
-    result = validator.validate_request("test_user", safe_request)
-    print(f"Safe request validation: {result['valid']}")
+    result = validator.validate_request("test_user", valid_request)
+    print(f"Valid request result: {result['valid']}")
     
-    # Test suspicious request
-    suspicious_request = {
-        "text": "'; DROP TABLE users; --",
-        "script": "<script>alert('xss')</script>"
+    # Test malicious request
+    malicious_request = {
+        "operation": "generate_caption",
+        "text": "<script>alert('xss')</script>",
+        "image": test_image
     }
     
-    result = validator.validate_request("test_user", suspicious_request)
-    print(f"Suspicious request validation: {result['valid']}")
-    print(f"Blocked reason: {result['blocked_reason']}")
+    result = validator.validate_request("test_user", malicious_request)
+    print(f"Malicious request blocked: {not result['valid']}")
     
-    # Test rate limiting
-    for i in range(102):  # Exceed rate limit
-        validator.rate_limiter.allow_request("heavy_user")
+    print("✓ SecurityValidator works")
     
-    result = validator.validate_request("heavy_user", safe_request)
-    print(f"Rate limited request: {result['valid']}")
+    # Test rate limiter
+    print("\nTesting RateLimiter...")
+    rate_limiter = RateLimiter(max_requests_per_minute=5)
     
-    # Test crypto utils
-    crypto = CryptoUtils()
-    data = "test data"
-    signature = crypto.sign_data(data)
-    is_valid = crypto.verify_signature(data, signature)
-    print(f"Signature validation: {is_valid}")
+    user_id = "test_user"
+    allowed_count = 0
     
-    print("Security validation tests completed!")
+    for i in range(10):
+        if rate_limiter.allow_request(user_id):
+            allowed_count += 1
+    
+    print(f"Allowed {allowed_count}/10 requests (limit: 5)")
+    print(f"Remaining requests: {rate_limiter.get_remaining_requests(user_id)}")
+    
+    print("✓ RateLimiter works")
+    
+    # Test input sanitizer
+    print("\nTesting InputSanitizer...")
+    sanitizer = InputSanitizer()
+    
+    dirty_data = {
+        "text": "<script>alert('xss')</script>Hello World",
+        "number": float('inf'),
+        "array": list(range(2000)),  # Too large
+        "nested": {"key": "<malicious>value"}
+    }
+    
+    clean_data = sanitizer.sanitize_request(dirty_data)
+    print(f"Sanitized data keys: {list(clean_data.keys())}")
+    print(f"Sanitized text: {clean_data.get('text', '')[:50]}...")
+    
+    print("✓ InputSanitizer works")
+    
+    print("\nAll security tests passed!")

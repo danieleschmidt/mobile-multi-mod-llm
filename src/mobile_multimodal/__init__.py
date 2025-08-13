@@ -10,7 +10,10 @@ from .models import (
     EfficientSelfAttention, 
     MobileConvBlock,
     ModelProfiler,
-    NeuralArchitectureSearchSpace
+    NeuralArchitectureSearchSpace,
+    AdaptiveInferenceEngine,
+    NeuralCompressionEngine,
+    MobileOptimizer
 )
 from .quantization import (
     INT2Quantizer, 
@@ -42,6 +45,9 @@ __all__ = [
     "MobileConvBlock",
     "ModelProfiler",
     "NeuralArchitectureSearchSpace",
+    "AdaptiveInferenceEngine",
+    "NeuralCompressionEngine", 
+    "MobileOptimizer",
     
     # Quantization
     "INT2Quantizer",

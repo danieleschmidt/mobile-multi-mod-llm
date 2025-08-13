@@ -2,7 +2,7 @@
   "code_quality": {
     "syntax_errors": {
       "passed": true,
-      "message": "No syntax errors found in 18 files",
+      "message": "No syntax errors found in 24 files",
       "details": []
     },
     "import_structure": {
@@ -11,17 +11,17 @@
       "details": {
         "issues": [],
         "proper_imports": 0,
-        "total_files": 18
+        "total_files": 24
       }
     },
     "function_complexity": {
       "passed": false,
-      "message": "Analyzed 442 functions, 189 highly complex",
+      "message": "Analyzed 628 functions, 260 highly complex",
       "details": [
         "__init__.py:setup_logging (complexity: 108)",
         "core.py:__init__ (complexity: 446)",
         "core.py:_validate_device (complexity: 123)",
-        "core.py:_init_model (complexity: 128)",
+        "core.py:_init_model (complexity: 187)",
         "core.py:_validate_input_image (complexity: 212)",
         "core.py:_preprocess_image (complexity: 142)",
         "core.py:generate_caption (complexity: 698)",
@@ -32,33 +32,39 @@
     },
     "code_coverage": {
       "passed": true,
-      "message": "Estimated coverage: 78.6% (11/14 modules)",
+      "message": "Estimated coverage: 60.0% (12/20 modules)",
       "details": {
         "covered_modules": [
-          "preprocessing",
-          "train",
-          "models",
-          "security",
-          "optimization",
-          "monitoring",
+          "resilience",
           "export",
+          "quantization",
+          "train",
+          "preprocessing",
+          "optimization",
+          "security",
+          "models",
           "benchmark",
-          "core",
+          "monitoring",
           "dataset",
-          "quantization"
+          "core"
         ],
         "uncovered_modules": [
+          "advanced_testing",
+          "storage",
+          "global_deployment",
+          "distributed_inference",
+          "advanced_security",
           "cache",
           "utils",
-          "storage"
+          "auto_scaling"
         ]
       }
     },
     "docstring_coverage": {
       "passed": true,
-      "message": "Docstring coverage: 91.7% (311/339)",
+      "message": "Docstring coverage: 88.9% (433/487)",
       "details": {
-        "coverage_ratio": 0.9174041297935103
+        "coverage_ratio": 0.8891170431211499
       }
     }
   },
@@ -117,9 +123,9 @@
     },
     "api_documentation": {
       "passed": true,
-      "message": "API documentation: 96.0% classes documented (72/75)",
+      "message": "API documentation: 94.1% classes documented (112/119)",
       "details": {
-        "coverage": 0.96
+        "coverage": 0.9411764705882353
       }
     },
     "examples": {
@@ -133,9 +139,9 @@
   "security": {
     "input_validation": {
       "passed": true,
-      "message": "435 input validation patterns found",
+      "message": "554 input validation patterns found",
       "details": {
-        "pattern_count": 435
+        "pattern_count": 554
       }
     },
     "security_patterns": {
@@ -191,16 +197,16 @@
     },
     "caching_implementation": {
       "passed": true,
-      "message": "Caching patterns: 429 occurrences found",
+      "message": "Caching patterns: 453 occurrences found",
       "details": {
-        "cache_usage": 429
+        "cache_usage": 453
       }
     },
     "scalability_patterns": {
       "passed": true,
-      "message": "Scalability patterns: 1081 occurrences found",
+      "message": "Scalability patterns: 1588 occurrences found",
       "details": {
-        "scalability_usage": 1081
+        "scalability_usage": 1588
       }
     }
   },

@@ -1303,8 +1303,8 @@ if __name__ == "__main__":
     test_image = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
     
     try:
-        # Initialize model
-        model = MobileMultiModalLLM(device="cpu")
+        # Initialize model with relaxed security for testing
+        model = MobileMultiModalLLM(device="cpu", strict_security=False)
         
         # Test caption generation
         caption = model.generate_caption(test_image)

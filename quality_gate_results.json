@@ -19,15 +19,15 @@
       "message": "Analyzed 628 functions, 260 highly complex",
       "details": [
         "__init__.py:setup_logging (complexity: 108)",
-        "core.py:__init__ (complexity: 446)",
-        "core.py:_validate_device (complexity: 123)",
-        "core.py:_init_model (complexity: 187)",
-        "core.py:_validate_input_image (complexity: 212)",
-        "core.py:_preprocess_image (complexity: 142)",
-        "core.py:generate_caption (complexity: 698)",
-        "core.py:_generate_caption_internal (complexity: 420)",
-        "core.py:extract_text (complexity: 118)",
-        "core.py:get_image_embeddings (complexity: 112)"
+        "advanced_security.py:validate_advanced_request (complexity: 404)",
+        "advanced_security.py:_check_rate_limits (complexity: 213)",
+        "advanced_security.py:_validate_inputs (complexity: 361)",
+        "advanced_security.py:_analyze_user_behavior (complexity: 395)",
+        "advanced_security.py:_check_model_integrity (complexity: 191)",
+        "advanced_security.py:_log_security_event (complexity: 206)",
+        "advanced_security.py:get_security_dashboard (complexity: 359)",
+        "advanced_security.py:_calculate_overall_threat_level (complexity: 130)",
+        "advanced_security.py:generate_security_report (complexity: 314)"
       ]
     },
     "code_coverage": {
@@ -35,28 +35,28 @@
       "message": "Estimated coverage: 60.0% (12/20 modules)",
       "details": {
         "covered_modules": [
-          "resilience",
-          "export",
-          "quantization",
-          "train",
           "preprocessing",
-          "optimization",
-          "security",
-          "models",
           "benchmark",
+          "export",
+          "train",
+          "optimization",
           "monitoring",
+          "core",
+          "resilience",
+          "models",
+          "quantization",
           "dataset",
-          "core"
+          "security"
         ],
         "uncovered_modules": [
-          "advanced_testing",
-          "storage",
           "global_deployment",
-          "distributed_inference",
-          "advanced_security",
-          "cache",
           "utils",
-          "auto_scaling"
+          "advanced_testing",
+          "advanced_security",
+          "auto_scaling",
+          "cache",
+          "storage",
+          "distributed_inference"
         ]
       }
     },
@@ -139,9 +139,9 @@
   "security": {
     "input_validation": {
       "passed": true,
-      "message": "554 input validation patterns found",
+      "message": "556 input validation patterns found",
       "details": {
-        "pattern_count": 554
+        "pattern_count": 556
       }
     },
     "security_patterns": {

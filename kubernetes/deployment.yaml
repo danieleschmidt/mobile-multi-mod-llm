@@ -1,0 +1,516 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-guard
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+    component: orchestrator
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: pipeline-guard
+      component: orchestrator
+  template:
+    metadata:
+      labels:
+        app: pipeline-guard
+        component: orchestrator
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: pipeline-guard
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      initContainers:
+      - name: init-db
+        image: pipeline-guard:production
+        command: ['sh', '-c']
+        args:
+          - |
+            echo "Initializing database..."
+            python3 -c "
+            from src.mobile_multimodal.guard_metrics import MetricsCollector
+            from src.mobile_multimodal.guard_logging import GuardLogHandler
+            import os
+            
+            # Initialize databases
+            MetricsCollector('/app/data/pipeline_metrics.db')
+            GuardLogHandler('/app/data/pipeline_logs.db')
+            print('Database initialization completed')
+            "
+        volumeMounts:
+        - name: pipeline-data
+          mountPath: /app/data
+        - name: pipeline-config
+          mountPath: /app/config
+          readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          
+      containers:
+      - name: orchestrator
+        image: pipeline-guard:production
+        imagePullPolicy: IfNotPresent
+        command: ["./entrypoint.sh"]
+        args: ["orchestrator"]
+        
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+          
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: CONFIG_PATH
+          value: "/app/config/production.yaml"
+        - name: PIPELINE_GUARD_DB_PATH
+          value: "/app/data/pipeline_guard.db"
+        - name: PIPELINE_GUARD_LOG_PATH
+          value: "/app/logs/pipeline_guard.log"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+              
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+            
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+          
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 18
+          
+        volumeMounts:
+        - name: pipeline-data
+          mountPath: /app/data
+        - name: pipeline-logs
+          mountPath: /app/logs
+        - name: pipeline-config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+          
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          
+      - name: metrics-exporter
+        image: pipeline-guard:production
+        imagePullPolicy: IfNotPresent
+        command: ["./entrypoint.sh"]
+        args: ["metrics"]
+        
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: PIPELINE_GUARD_DB_PATH
+          value: "/app/data/pipeline_metrics.db"
+          
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+            
+        volumeMounts:
+        - name: pipeline-data
+          mountPath: /app/data
+        - name: pipeline-logs
+          mountPath: /app/logs
+        - name: tmp
+          mountPath: /tmp
+          
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          
+      volumes:
+      - name: pipeline-data
+        persistentVolumeClaim:
+          claimName: pipeline-guard-data
+      - name: pipeline-logs
+        persistentVolumeClaim:
+          claimName: pipeline-guard-logs
+      - name: pipeline-config
+        configMap:
+          name: pipeline-guard-config
+      - name: tmp
+        emptyDir: {}
+        
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - pipeline-guard
+              topologyKey: kubernetes.io/hostname
+              
+      tolerations:
+      - key: "node.kubernetes.io/not-ready"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+      - key: "node.kubernetes.io/unreachable"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pipeline-guard-service
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+    component: orchestrator
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: pipeline-guard
+    component: orchestrator
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pipeline-guard-headless
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+    component: orchestrator
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: pipeline-guard
+    component: orchestrator
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pipeline-guard-config
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+data:
+  production.yaml: |
+    guard_name: "mobile-multimodal-pipeline-guard-k8s"
+    log_level: "INFO"
+    log_file: "/app/logs/pipeline_guard.log"
+    state_file: "/app/data/pipeline_guard_state.json"
+    
+    # Component configurations
+    model_training:
+      enabled: true
+      check_interval_seconds: 300
+      timeout_seconds: 300
+      max_retries: 3
+      auto_recovery: true
+      
+    quantization:
+      enabled: true
+      check_interval_seconds: 180
+      timeout_seconds: 120
+      max_retries: 3
+      auto_recovery: true
+      
+    mobile_export:
+      enabled: true
+      check_interval_seconds: 120
+      timeout_seconds: 180
+      max_retries: 3
+      auto_recovery: true
+      
+    testing:
+      enabled: true
+      check_interval_seconds: 60
+      timeout_seconds: 120
+      max_retries: 2
+      auto_recovery: true
+      
+    deployment:
+      enabled: true
+      check_interval_seconds: 300
+      timeout_seconds: 60
+      max_retries: 3
+      auto_recovery: true
+      
+    monitoring:
+      enabled: true
+      check_interval_seconds: 30
+      timeout_seconds: 30
+      max_retries: 5
+      auto_recovery: true
+      
+    storage:
+      enabled: true
+      check_interval_seconds: 60
+      timeout_seconds: 30
+      max_retries: 2
+      auto_recovery: true
+      
+    compute:
+      enabled: true
+      check_interval_seconds: 45
+      timeout_seconds: 15
+      max_retries: 3
+      auto_recovery: true
+    
+    # Alerting configuration
+    alerting:
+      enabled: true
+      alert_cooldown_minutes: 15
+      escalation_timeout_minutes: 60
+      
+    # Storage monitoring
+    storage_monitoring:
+      disk_usage_critical: 90
+      disk_usage_warning: 80
+      cleanup_enabled: true
+      cleanup_age_days: 7
+      backup_retention_days: 30
+      
+    # Performance monitoring
+    performance:
+      cpu_threshold: 80.0
+      memory_threshold: 85.0
+      load_average_threshold: 8.0
+      inference_latency_ms: 100
+      training_timeout_hours: 24
+      
+    # Security configuration
+    security:
+      enabled: true
+      scan_interval_hours: 6
+      vulnerability_db_update: true
+      secret_detection: true
+      compliance_checks: true
+      
+    # Advanced features
+    ml_anomaly_detection: true
+    predictive_scaling: true
+    chaos_engineering: false
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pipeline-guard-data
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pipeline-guard-logs
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pipeline-guard
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: pipeline-system
+  name: pipeline-guard-role
+  labels:
+    app: pipeline-guard
+rules:
+- apiGroups: [""]
+  resources: ["pods", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-guard-rolebinding
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+subjects:
+- kind: ServiceAccount
+  name: pipeline-guard
+  namespace: pipeline-system
+roleRef:
+  kind: Role
+  name: pipeline-guard-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pipeline-guard-pdb
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: pipeline-guard
+      component: orchestrator
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pipeline-guard-hpa
+  namespace: pipeline-system
+  labels:
+    app: pipeline-guard
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pipeline-guard
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60

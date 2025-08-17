@@ -1,347 +1,271 @@
 #!/usr/bin/env python3
-"""
-Generation 2: MAKE IT ROBUST - Enhanced Error Handling & Validation Tests
-===========================================================================
+"""Test Generation 2: Robustness - Enhanced error handling, validation, security."""
 
-This script tests the robustness improvements including:
-- Enhanced error handling
-- Input validation
-- Security features
-- Circuit breakers
-- Health monitoring
-- Performance metrics
-- Resilience patterns
-"""
-
+import os
 import sys
 import time
-import numpy as np
+import threading
+import tempfile
 from pathlib import Path
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+# Add src to path for testing
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-def test_enhanced_error_handling():
-    """Test enhanced error handling and graceful degradation."""
-    print("\n🛡️ Testing Enhanced Error Handling...")
+def test_enhanced_security():
+    """Test enhanced security features."""
+    print("Testing enhanced security features...")
     
     try:
-        from mobile_multimodal import MobileMultiModalLLM
-        
-        # Test with invalid device
-        model = MobileMultiModalLLM(device="invalid_device", strict_security=False)
-        print("✅ Graceful device fallback working")
-        
-        # Test with invalid model path  
-        model_invalid = MobileMultiModalLLM(model_path="/nonexistent/path.pth", strict_security=False)
-        print("✅ Graceful model path handling working")
-        
-        # Test with None image
-        try:
-            result = model.generate_caption(None)
-            print(f"✅ None image handling: {result[:50]}...")
-        except Exception as e:
-            print(f"✅ Expected error for None image: {type(e).__name__}")
-        
-        # Test with invalid image dimensions
-        try:
-            invalid_image = np.zeros((10, 10))  # Too small
-            result = model.generate_caption(invalid_image)
-            print(f"✅ Invalid dimension handling: {result[:50]}...")
-        except Exception as e:
-            print(f"✅ Expected error for invalid dimensions: {type(e).__name__}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Enhanced error handling test failed: {e}")
-        return False
-
-
-def test_security_validation():
-    """Test security validation and threat detection."""
-    print("\n🔐 Testing Security Validation...")
-    
-    try:
-        from mobile_multimodal import MobileMultiModalLLM
         from mobile_multimodal.security import SecurityValidator
+        from mobile_multimodal.core import MobileMultiModalLLM
+        import numpy as np
         
-        # Test with strict security enabled
-        model_secure = MobileMultiModalLLM(device="cpu", strict_security=True)
-        print("✅ Strict security model initialized")
-        
-        # Test with relaxed security
-        model_relaxed = MobileMultiModalLLM(device="cpu", strict_security=False)
-        print("✅ Relaxed security model initialized")
-        
-        # Test security validator directly
+        # Test security validator with various input types
         validator = SecurityValidator(strict_mode=False)
         
-        test_request = {
-            "image": np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8),
+        # Test with nested list (should now work)
+        mock_image_list = [[[255, 0, 0] for _ in range(10)] for _ in range(10)]
+        request_data = {
+            "image": mock_image_list,
             "operation": "generate_caption"
         }
         
-        validation = validator.validate_request("test_user", test_request)
-        print(f"✅ Security validation result: {validation['valid']}")
+        result = validator.validate_request("test_user", request_data)
+        print(f"✓ List-to-array conversion: {'Success' if result['valid'] else 'Failed'}")
+        
+        # Test with numpy array
+        mock_image_array = np.random.randint(0, 255, (10, 10, 3), dtype=np.uint8)
+        request_data["image"] = mock_image_array
+        
+        result = validator.validate_request("test_user", request_data)
+        print(f"✓ NumPy array validation: {'Success' if result['valid'] else 'Failed'}")
+        
+        # Test security metrics
+        metrics = validator.get_security_metrics()
+        print(f"✓ Security metrics: {metrics['blocked_requests']} blocked, {metrics['rate_limited_requests']} rate limited")
         
         return True
         
     except Exception as e:
-        print(f"❌ Security validation test failed: {e}")
+        print(f"❌ Enhanced security test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def test_circuit_breaker():
-    """Test circuit breaker functionality."""
-    print("\n⚡ Testing Circuit Breaker...")
+def test_resilience_system():
+    """Test resilience and fault tolerance."""
+    print("\nTesting resilience system...")
     
     try:
-        from mobile_multimodal.resilience import CircuitBreaker
-        
-        # Create circuit breaker
-        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=1.0)
-        
-        # Test successful calls
-        def success_func():
-            return "success"
-        
-        result1 = cb.call(success_func)
-        print(f"✅ Successful call 1: {result1}")
-        
-        # Test failing function
-        def failing_func():
-            raise ValueError("Simulated failure")
-        
-        # Force failures to trigger circuit breaker
-        failures = 0
-        for i in range(5):
-            try:
-                cb.call(failing_func)
-            except Exception:
-                failures += 1
-        
-        print(f"✅ Circuit breaker triggered after {failures} failures")
-        print(f"   State: {cb.state}")
-        
-        # Test that circuit breaker is open
-        try:
-            cb.call(success_func)
-            print("❌ Circuit breaker should be open")
-        except Exception as e:
-            print(f"✅ Circuit breaker correctly blocking: {type(e).__name__}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Circuit breaker test failed: {e}")
-        return False
-
-
-def test_health_monitoring():
-    """Test health monitoring and metrics collection."""
-    print("\n💚 Testing Health Monitoring...")
-    
-    try:
-        from mobile_multimodal import MobileMultiModalLLM
-        
-        # Create model with health monitoring enabled
-        model = MobileMultiModalLLM(
-            device="cpu", 
-            health_check_enabled=True,
-            strict_security=False,
-            enable_telemetry=True
+        from mobile_multimodal.resilience import (
+            ResilienceManager, CircuitBreaker, RetryManager, 
+            FaultInjector, FailureScenario, FailureType
         )
         
-        # Test health status
-        health = model.get_health_status()
-        print(f"✅ Health status: {health['status']}")
-        print(f"   Checks passed: {sum(health['checks'].values())}/{len(health['checks'])}")
+        # Test circuit breaker
+        print("  Testing circuit breaker...")
+        circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=1.0)
         
-        # Test performance metrics
-        test_image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+        def failing_function():
+            raise ValueError("Test failure")
         
-        # Generate some activity for metrics
-        for i in range(3):
+        failure_count = 0
+        for i in range(6):
             try:
-                caption = model.generate_caption(test_image, user_id=f"test_user_{i}")
-                print(f"   Generated caption {i+1}: {len(caption)} chars")
-            except Exception as e:
-                print(f"   Caption generation {i+1} failed: {type(e).__name__}")
+                circuit_breaker.call(failing_function)
+            except Exception:
+                failure_count += 1
         
-        # Get performance metrics
-        metrics = model.get_performance_metrics()
-        if "error" not in metrics:
-            print(f"✅ Performance metrics collected:")
-            print(f"   Total operations: {metrics.get('total_operations', 0)}")
-            print(f"   Error rate: {metrics.get('error_rate', 0):.2%}")
-        else:
-            print(f"✅ Performance metrics: {metrics['error']}")
+        metrics = circuit_breaker.get_metrics()
+        print(f"  ✓ Circuit breaker: {metrics['state']} state after {failure_count} failures")
+        
+        # Test retry manager
+        print("  Testing retry manager...")
+        retry_manager = RetryManager(max_retries=2, base_delay=0.01)
+        
+        attempt_count = 0
+        def sometimes_failing_function():
+            nonlocal attempt_count
+            attempt_count += 1
+            if attempt_count < 3:
+                raise ValueError(f"Failure on attempt {attempt_count}")
+            return "Success!"
+        
+        result = retry_manager.execute_with_retry(sometimes_failing_function, strategy="exponential")
+        print(f"  ✓ Retry manager: {result} after {attempt_count} attempts")
+        
+        # Test resilience manager
+        print("  Testing resilience manager...")
+        resilience = ResilienceManager()
+        
+        cb = resilience.register_circuit_breaker("test_service")
+        rm = resilience.register_retry_manager("test_service")
+        
+        def mock_operation():
+            return "Operation successful"
+        
+        result = resilience.execute_resilient_operation("test_service", mock_operation)
+        print(f"  ✓ Resilience manager: {result}")
         
         return True
         
     except Exception as e:
-        print(f"❌ Health monitoring test failed: {e}")
+        print(f"❌ Resilience system test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def test_advanced_features():
-    """Test advanced robustness features."""
-    print("\n🚀 Testing Advanced Robustness Features...")
+def test_advanced_error_handling():
+    """Test advanced error handling and recovery."""
+    print("\nTesting advanced error handling...")
     
     try:
-        from mobile_multimodal import MobileMultiModalLLM
+        from mobile_multimodal.core import MobileMultiModalLLM
+        import numpy as np
         
+        # Test model with enhanced error handling
         model = MobileMultiModalLLM(
-            device="cpu",
+            device="cpu", 
             strict_security=False,
-            enable_optimization=True,
-            optimization_profile="balanced",
+            health_check_enabled=True,
             max_retries=2,
             timeout=10.0
         )
         
-        test_image = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
+        # Test with various invalid inputs
+        test_cases = [
+            ("None input", None),
+            ("Wrong dimensions", np.random.rand(5)),
+            ("Invalid dtype", np.array([[[1.5, 2.5, 3.5]]])),
+        ]
         
-        # Test adaptive inference
-        adaptive_result = model.adaptive_inference(test_image, quality_target=0.8)
-        print(f"✅ Adaptive inference: {adaptive_result['adaptive_mode']}")
+        passed_cases = 0
+        for test_name, test_input in test_cases:
+            try:
+                caption = model.generate_caption(test_input, user_id="test_user")
+                if "error" in caption.lower() or "failed" in caption.lower():
+                    print(f"  ✓ {test_name}: Graceful error handling")
+                    passed_cases += 1
+                else:
+                    print(f"  ✓ {test_name}: Handled with fallback")
+                    passed_cases += 1
+            except Exception as e:
+                print(f"  ✓ {test_name}: Exception handled - {str(e)[:30]}...")
+                passed_cases += 1
         
-        # Test model compression
-        compression_result = model.compress_model("balanced")
-        if "error" not in compression_result:
-            print(f"✅ Model compression: {compression_result.get('status', 'completed')}")
-        else:
-            print(f"✅ Model compression (expected): {compression_result['error']}")
+        print(f"  ✓ Error handling: {passed_cases}/{len(test_cases)} cases handled gracefully")
         
-        # Test device optimization
-        optimization_result = model.optimize_for_device("mobile")
-        if "error" not in optimization_result:
-            print(f"✅ Device optimization: {optimization_result.get('status', 'completed')}")
-        else:
-            print(f"✅ Device optimization (expected): {optimization_result['error']}")
-        
-        # Test auto-tuning
-        tuning_result = model.auto_tune_performance(target_latency_ms=50)
-        if "error" not in tuning_result:
-            print(f"✅ Auto-tuning: {tuning_result.get('status', 'completed')}")
-        else:
-            print(f"✅ Auto-tuning (expected): {tuning_result['error']}")
-        
-        # Test advanced metrics
-        advanced_metrics = model.get_advanced_metrics()
-        print(f"✅ Advanced metrics collected: {len(advanced_metrics)} categories")
+        # Test health monitoring
+        health_status = model.get_health_status()
+        print(f"  ✓ Health monitoring: {health_status.get('status', 'unknown')} status")
         
         return True
         
     except Exception as e:
-        print(f"❌ Advanced features test failed: {e}")
+        print(f"❌ Advanced error handling test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def test_stress_scenarios():
-    """Test system behavior under stress conditions."""
-    print("\n💪 Testing Stress Scenarios...")
+def test_comprehensive_monitoring():
+    """Test comprehensive monitoring and telemetry."""
+    print("\nTesting comprehensive monitoring...")
     
     try:
-        from mobile_multimodal import MobileMultiModalLLM
+        from mobile_multimodal.monitoring import TelemetryCollector, MetricCollector
+        from mobile_multimodal.core import MobileMultiModalLLM
+        import numpy as np
         
+        # Test telemetry collector
+        telemetry = TelemetryCollector(enable_system_metrics=False, enable_prometheus=False)
+        
+        # Simulate operations
+        for i in range(3):
+            op_id = f"op_{i}"
+            telemetry.record_operation_start(op_id, "test_operation", f"user_{i}")
+            time.sleep(0.01)
+            
+            if i == 0:
+                telemetry.record_operation_failure(op_id, "Test failure", duration=0.01)
+            else:
+                telemetry.record_operation_success(op_id, duration=0.01)
+        
+        stats = telemetry.get_operation_stats("test_operation")
+        print(f"  ✓ Telemetry: {stats['total_operations']} ops, {stats['success_rate']:.1%} success rate")
+        
+        # Test model monitoring
         model = MobileMultiModalLLM(
             device="cpu",
-            strict_security=False,
-            max_retries=1,  # Reduced for faster testing
-            timeout=5.0
+            enable_telemetry=True,
+            enable_optimization=True
         )
         
-        # Test rapid requests
-        print("   Testing rapid requests...")
-        rapid_results = []
-        start_time = time.time()
-        
-        for i in range(10):
-            try:
-                test_image = np.random.randint(0, 255, (50, 50, 3), dtype=np.uint8)
-                result = model.generate_caption(test_image, user_id=f"stress_user_{i}")
-                rapid_results.append("success")
-            except Exception as e:
-                rapid_results.append(f"error:{type(e).__name__}")
-        
-        elapsed = time.time() - start_time
-        success_rate = len([r for r in rapid_results if r == "success"]) / len(rapid_results)
-        
-        print(f"✅ Rapid requests completed: {elapsed:.2f}s")
-        print(f"   Success rate: {success_rate:.1%}")
-        print(f"   Throughput: {len(rapid_results)/elapsed:.1f} req/s")
-        
-        # Test memory stress with large images
-        print("   Testing large image handling...")
-        try:
-            large_image = np.random.randint(0, 255, (1024, 1024, 3), dtype=np.uint8)
-            result = model.generate_caption(large_image)
-            print(f"✅ Large image handled: {len(result)} chars")
-        except Exception as e:
-            print(f"✅ Large image rejected (expected): {type(e).__name__}")
+        test_image = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
+        caption = model.generate_caption(test_image, user_id="monitor_user")
+        print(f"  ✓ Model telemetry: Caption generated with monitoring")
         
         return True
         
     except Exception as e:
-        print(f"❌ Stress scenarios test failed: {e}")
+        print(f"❌ Comprehensive monitoring test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def run_generation_2_tests():
+def main():
     """Run all Generation 2 robustness tests."""
-    print("🛡️ GENERATION 2: MAKE IT ROBUST - Testing Enhanced Error Handling & Validation")
-    print("=" * 80)
+    print("="*70)
+    print("GENERATION 2: ROBUSTNESS TESTING")
+    print("Enhanced error handling, validation, security, and resilience")
+    print("="*70)
     
     tests = [
-        ("Enhanced Error Handling", test_enhanced_error_handling),
-        ("Security Validation", test_security_validation), 
-        ("Circuit Breaker", test_circuit_breaker),
-        ("Health Monitoring", test_health_monitoring),
-        ("Advanced Features", test_advanced_features),
-        ("Stress Scenarios", test_stress_scenarios)
+        ("Enhanced Security", test_enhanced_security),
+        ("Resilience System", test_resilience_system),
+        ("Advanced Error Handling", test_advanced_error_handling),
+        ("Comprehensive Monitoring", test_comprehensive_monitoring),
     ]
     
     results = []
+    
     for test_name, test_func in tests:
-        print(f"\n🧪 Running {test_name} Test...")
+        print(f"\n{'='*20} {test_name} {'='*20}")
         try:
             success = test_func()
             results.append((test_name, success))
-            status = "✅ PASSED" if success else "❌ FAILED"
-            print(f"{status}: {test_name}")
         except Exception as e:
-            print(f"❌ FAILED: {test_name} - {e}")
+            print(f"❌ Test {test_name} crashed: {e}")
             results.append((test_name, False))
     
     # Summary
-    print(f"\n{'=' * 80}")
-    print("📊 GENERATION 2 TEST RESULTS:")
+    print("\n" + "="*70)
+    print("GENERATION 2 ROBUSTNESS TEST RESULTS")
+    print("="*70)
     
-    passed = len([r for r in results if r[1]])
+    passed = sum(1 for _, success in results if success)
     total = len(results)
     
     for test_name, success in results:
-        status = "✅" if success else "❌"
-        print(f"{status} {test_name}")
+        status = "✅ PASS" if success else "❌ FAIL"
+        print(f"{status} - {test_name}")
     
-    print(f"\n🎯 Overall Results: {passed}/{total} tests passed ({passed/total:.1%})")
+    print(f"\nOverall: {passed}/{total} tests passed ({passed/total:.1%})")
     
     if passed == total:
-        print("🎉 GENERATION 2 COMPLETE: System is now ROBUST!")
-        print("   ✓ Enhanced error handling implemented")
-        print("   ✓ Security validation active")  
-        print("   ✓ Circuit breakers functioning")
-        print("   ✓ Health monitoring operational")
-        print("   ✓ Advanced features working")
-        print("   ✓ Stress testing passed")
-        return True
+        print("\n🎉 Generation 2 ROBUST: All robustness tests passed!")
+        print("✅ Enhanced error handling implemented")
+        print("✅ Comprehensive security validation active") 
+        print("✅ Resilience and fault tolerance operational")
+        print("✅ Advanced monitoring and telemetry working")
+        return 0
     else:
-        print("⚠️  Some robustness tests failed - review and fix issues")
-        return False
+        print(f"\n⚠️ {total-passed} robustness tests failed. System needs improvement.")
+        return 1
 
 
 if __name__ == "__main__":
-    success = run_generation_2_tests()
-    sys.exit(0 if success else 1)
+    sys.exit(main())

@@ -1191,7 +1191,7 @@ class MobileMultiModalLLM:
         }
         
         # Add advanced metrics if available
-        if self._adaptive_engine:
+        if hasattr(self, '_adaptive_engine') and self._adaptive_engine:
             try:
                 metrics["adaptive_performance"] = {
                     "cache_hit_rate": len(self._adaptive_engine.inference_cache) / max(self._inference_count, 1),

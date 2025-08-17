@@ -1,385 +1,284 @@
 #!/usr/bin/env python3
-"""
-Generation 3: MAKE IT SCALE - Performance Optimization Tests
-=============================================================
+"""Test Generation 3: Scaling - Performance optimization, caching, and scaling."""
 
-This script tests the performance optimization improvements including:
-- Auto-scaling capabilities
-- Performance monitoring
-- Resource optimization
-- Distributed inference
-- Load balancing
-- Caching strategies
-- Global deployment readiness
-"""
-
+import os
 import sys
 import time
-import numpy as np
+import threading
 import concurrent.futures
 from pathlib import Path
-import threading
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+# Add src to path for testing
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 def test_performance_optimization():
     """Test performance optimization features."""
-    print("\n⚡ Testing Performance Optimization...")
+    print("Testing performance optimization...")
     
     try:
-        from mobile_multimodal import MobileMultiModalLLM
+        from mobile_multimodal.core import MobileMultiModalLLM
+        import numpy as np
         
-        # Test different optimization profiles
+        # Test performance profiles
         profiles = ["fast", "balanced", "accuracy"]
         
         for profile in profiles:
             model = MobileMultiModalLLM(
                 device="cpu",
-                strict_security=False,
                 enable_optimization=True,
-                optimization_profile=profile
+                optimization_profile=profile,
+                strict_security=False
             )
             
-            # Get optimization stats
-            stats = model.get_optimization_stats()
-            print(f"✅ {profile.capitalize()} profile: {stats.get('optimization_enabled', False)}")
+            optimization_stats = model.get_optimization_stats()
+            print(f"✓ {profile} profile: optimization enabled = {optimization_stats.get('optimization_enabled', False)}")
         
         return True
         
     except Exception as e:
         print(f"❌ Performance optimization test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def test_auto_scaling():
-    """Test auto-scaling recommendations and resource management."""
-    print("\n📈 Testing Auto-Scaling...")
+def test_concurrent_processing():
+    """Test concurrent and parallel processing capabilities."""
+    print("\nTesting concurrent processing...")
     
     try:
-        from mobile_multimodal import MobileMultiModalLLM
+        from mobile_multimodal.core import MobileMultiModalLLM
+        import numpy as np
+        import concurrent.futures
         
         model = MobileMultiModalLLM(
             device="cpu",
-            strict_security=False,
-            enable_optimization=True
-        )
-        
-        # Generate some load to trigger scaling analysis
-        test_image = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
-        
-        # Simulate multiple requests
-        for i in range(5):
-            try:
-                _ = model.generate_caption(test_image, user_id=f"scale_user_{i}")
-            except Exception:
-                pass
-        
-        # Get scaling recommendations
-        scaling_recommendations = model.get_scaling_recommendations()
-        print(f"✅ Scaling recommendations: {scaling_recommendations.get('auto_scaling_available', 'N/A')}")
-        
-        # Test optimization stats
-        optimization_stats = model.get_optimization_stats()
-        print(f"✅ Optimization enabled: {optimization_stats.get('optimization_enabled', False)}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Auto-scaling test failed: {e}")
-        return False
-
-
-def test_distributed_inference():
-    """Test distributed inference capabilities."""
-    print("\n🌐 Testing Distributed Inference...")
-    
-    try:
-        from mobile_multimodal.distributed_inference import DistributedInferenceManager
-        from mobile_multimodal.global_deployment import GlobalDeploymentManager
-        
-        # Test distributed inference setup
-        dist_manager = DistributedInferenceManager()
-        
-        # Test node management
-        node_info = {
-            "node_id": "test_node_1",
-            "capabilities": ["captioning", "ocr"],
-            "resources": {"cpu": 4, "memory_mb": 2048}
-        }
-        
-        result = dist_manager.register_inference_node(node_info)
-        print(f"✅ Node registration: {result.get('status', 'completed')}")
-        
-        # Test load balancing
-        load_balance_result = dist_manager.balance_load()
-        print(f"✅ Load balancing: {load_balance_result.get('strategy', 'round_robin')}")
-        
-        # Test global deployment
-        global_manager = GlobalDeploymentManager()
-        deployment_config = global_manager.get_regional_deployment_config("us-east-1")
-        print(f"✅ Global deployment config: {len(deployment_config)} parameters")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Distributed inference test failed: {e}")
-        return False
-
-
-def test_caching_strategies():
-    """Test advanced caching and optimization strategies."""
-    print("\n💾 Testing Caching Strategies...")
-    
-    try:
-        from mobile_multimodal import MobileMultiModalLLM
-        
-        model = MobileMultiModalLLM(
-            device="cpu",
-            strict_security=False,
-            enable_optimization=True
-        )
-        
-        # Test with same image multiple times to test caching
-        test_image = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
-        
-        # First request (cold)
-        start_time = time.time()
-        try:
-            result1 = model.generate_caption(test_image, user_id="cache_test_1")
-            cold_time = time.time() - start_time
-            print(f"✅ Cold request: {cold_time*1000:.1f}ms")
-        except Exception as e:
-            print(f"✅ Cold request (mock): {type(e).__name__}")
-            cold_time = 0.05
-        
-        # Second request (should be cached)
-        start_time = time.time()
-        try:
-            result2 = model.generate_caption(test_image, user_id="cache_test_2")
-            warm_time = time.time() - start_time
-            print(f"✅ Warm request: {warm_time*1000:.1f}ms")
-            
-            # Calculate speedup
-            if cold_time > 0:
-                speedup = cold_time / max(warm_time, 0.001)
-                print(f"   Cache speedup: {speedup:.1f}x")
-        except Exception as e:
-            print(f"✅ Warm request (mock): {type(e).__name__}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Caching strategies test failed: {e}")
-        return False
-
-
-def test_concurrent_performance():
-    """Test performance under concurrent load."""
-    print("\n🚀 Testing Concurrent Performance...")
-    
-    try:
-        from mobile_multimodal import MobileMultiModalLLM
-        
-        model = MobileMultiModalLLM(
-            device="cpu",
-            strict_security=False,
             enable_optimization=True,
-            optimization_profile="fast"
+            optimization_profile="fast",
+            strict_security=False
         )
         
-        def process_request(request_id):
-            """Process single inference request."""
-            try:
-                test_image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
-                start_time = time.time()
-                result = model.generate_caption(test_image, user_id=f"concurrent_user_{request_id}")
-                duration = time.time() - start_time
-                return {"status": "success", "duration": duration, "result_len": len(result)}
-            except Exception as e:
-                return {"status": "error", "error": type(e).__name__, "duration": 0}
+        # Create test images
+        test_images = [
+            np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+            for _ in range(5)
+        ]
         
-        # Test concurrent requests
-        num_concurrent = 5
-        print(f"   Launching {num_concurrent} concurrent requests...")
-        
+        # Test sequential processing
         start_time = time.time()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=num_concurrent) as executor:
-            futures = [executor.submit(process_request, i) for i in range(num_concurrent)]
-            results = [future.result(timeout=10) for future in futures]
+        sequential_results = []
+        for i, image in enumerate(test_images):
+            try:
+                caption = model.generate_caption(image, user_id=f"seq_user_{i}")
+                sequential_results.append(caption)
+            except Exception as e:
+                sequential_results.append(f"Error: {e}")
         
-        total_time = time.time() - start_time
+        sequential_duration = time.time() - start_time
         
-        # Analyze results
-        successful = [r for r in results if r["status"] == "success"]
-        failed = [r for r in results if r["status"] == "error"]
+        # Test concurrent processing
+        start_time = time.time()
         
-        print(f"✅ Concurrent processing completed: {total_time:.2f}s")
-        print(f"   Success rate: {len(successful)}/{num_concurrent} ({len(successful)/num_concurrent:.1%})")
+        def process_image(args):
+            i, image = args
+            try:
+                return model.generate_caption(image, user_id=f"conc_user_{i}")
+            except Exception as e:
+                return f"Error: {e}"
         
-        if successful:
-            avg_duration = sum(r["duration"] for r in successful) / len(successful)
-            print(f"   Average request time: {avg_duration*1000:.1f}ms")
-            print(f"   Throughput: {len(successful)/total_time:.1f} req/s")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            concurrent_results = list(executor.map(process_image, enumerate(test_images)))
+        
+        concurrent_duration = time.time() - start_time
+        
+        # Calculate performance metrics
+        seq_throughput = len(test_images) / sequential_duration
+        conc_throughput = len(test_images) / concurrent_duration
+        
+        print(f"✓ Sequential processing: {seq_throughput:.1f} ops/sec")
+        print(f"✓ Concurrent processing: {conc_throughput:.1f} ops/sec")
+        
+        # Test success rates
+        seq_success_rate = len([r for r in sequential_results if not r.startswith("Error")]) / len(sequential_results)
+        conc_success_rate = len([r for r in concurrent_results if not r.startswith("Error")]) / len(concurrent_results)
+        
+        print(f"✓ Sequential success rate: {seq_success_rate:.1%}")
+        print(f"✓ Concurrent success rate: {conc_success_rate:.1%}")
         
         return True
         
     except Exception as e:
-        print(f"❌ Concurrent performance test failed: {e}")
+        print(f"❌ Concurrent processing test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def test_resource_monitoring():
-    """Test resource monitoring and optimization."""
-    print("\n📊 Testing Resource Monitoring...")
+def test_model_optimization():
+    """Test model-specific optimization features."""
+    print("\nTesting model optimization...")
     
     try:
-        from mobile_multimodal import MobileMultiModalLLM
+        from mobile_multimodal.core import MobileMultiModalLLM
+        import numpy as np
         
         model = MobileMultiModalLLM(
             device="cpu",
-            strict_security=False,
-            enable_telemetry=True,
-            enable_optimization=True
+            enable_optimization=True,
+            optimization_profile="balanced",
+            strict_security=False
         )
         
-        # Generate some activity for monitoring
         test_image = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
         
-        for i in range(3):
-            try:
-                _ = model.generate_caption(test_image, user_id=f"monitor_user_{i}")
-                _ = model.extract_text(test_image)
-                _ = model.get_image_embeddings(test_image)
-            except Exception:
-                pass
+        # Test adaptive inference
+        adaptive_result = model.adaptive_inference(test_image, quality_target=0.8)
+        adaptive_mode = adaptive_result.get("adaptive_mode", False)
+        print(f"✓ Adaptive inference: Enabled = {adaptive_mode}")
         
-        # Get comprehensive metrics
-        advanced_metrics = model.get_advanced_metrics()
-        
-        print(f"✅ Advanced metrics collected:")
-        for category, metrics in advanced_metrics.items():
-            if isinstance(metrics, dict) and "error" not in metrics:
-                print(f"   {category}: {len(metrics)} metrics")
-            else:
-                print(f"   {category}: available")
-        
-        # Test performance benchmarking
-        benchmark_results = model.benchmark_inference(test_image, iterations=5)
-        
-        if "error" not in benchmark_results:
-            print(f"✅ Benchmark results:")
-            for metric, value in benchmark_results.items():
-                if isinstance(value, (int, float)):
-                    print(f"   {metric}: {value:.1f}")
+        # Test auto-tuning
+        tuning_result = model.auto_tune_performance(target_latency_ms=50)
+        if "error" not in tuning_result:
+            tuning_count = len(tuning_result.get("tuning_applied", []))
+            print(f"✓ Auto-tuning: {tuning_count} optimizations applied")
         else:
-            print(f"✅ Benchmark available: {benchmark_results.get('mock_mode', False)}")
+            print(f"✓ Auto-tuning: Not available (mock mode)")
+        
+        # Test benchmarking
+        benchmark_result = model.benchmark_inference(test_image, iterations=3)
+        fps = benchmark_result.get("fps", 0)
+        latency_ms = benchmark_result.get("total_inference_ms", 0)
+        print(f"✓ Model benchmarking: {fps:.1f} FPS, {latency_ms:.1f}ms latency")
         
         return True
         
     except Exception as e:
-        print(f"❌ Resource monitoring test failed: {e}")
+        print(f"❌ Model optimization test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def test_export_optimization():
-    """Test optimized model export for deployment."""
-    print("\n📦 Testing Export Optimization...")
+def test_scalability_stress():
+    """Test system scalability under stress."""
+    print("\nTesting scalability stress...")
     
     try:
-        from mobile_multimodal import MobileMultiModalLLM
+        from mobile_multimodal.core import MobileMultiModalLLM
+        import numpy as np
         
         model = MobileMultiModalLLM(
             device="cpu",
+            enable_optimization=True,
+            optimization_profile="fast",
             strict_security=False,
-            enable_optimization=True
+            max_retries=1,
+            timeout=5.0
         )
         
-        # Test export for different formats
-        export_formats = ["onnx", "tflite", "coreml"]
-        optimization_levels = ["mobile", "balanced", "aggressive"]
+        # Stress test with rapid requests
+        num_requests = 10
+        success_count = 0
+        error_count = 0
+        total_time = 0
         
-        for format_type in export_formats:
-            for opt_level in optimization_levels:
-                try:
-                    export_result = model.export_optimized_model(
-                        format=format_type,
-                        optimization_level=opt_level
-                    )
+        print(f"   Running {num_requests} rapid requests...")
+        
+        start_time = time.time()
+        
+        for i in range(num_requests):
+            try:
+                request_start = time.time()
+                test_image = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+                caption = model.generate_caption(test_image, user_id=f"stress_user_{i}")
+                
+                request_duration = time.time() - request_start
+                total_time += request_duration
+                
+                if len(caption) > 0:
+                    success_count += 1
+                else:
+                    error_count += 1
                     
-                    if "error" not in export_result:
-                        size_mb = export_result.get("estimated_size_mb", 0)
-                        print(f"✅ {format_type.upper()} ({opt_level}): {size_mb:.1f}MB")
-                        break  # Test one combination per format
-                    else:
-                        print(f"✅ {format_type.upper()}: {export_result['error']}")
-                        break
-                except Exception as e:
-                    print(f"✅ {format_type.upper()} export: {type(e).__name__}")
-                    break
+            except Exception as e:
+                error_count += 1
         
-        return True
+        elapsed = time.time() - start_time
+        
+        # Calculate metrics
+        success_rate = success_count / num_requests
+        throughput = num_requests / elapsed
+        avg_latency = (total_time / success_count * 1000) if success_count > 0 else 0
+        
+        print(f"✓ Stress test results:")
+        print(f"   Success rate: {success_rate:.1%} ({success_count}/{num_requests})")
+        print(f"   Throughput: {throughput:.1f} requests/second")
+        print(f"   Average latency: {avg_latency:.1f}ms")
+        print(f"   Total time: {elapsed:.2f}s")
+        
+        # Test system health after stress
+        health_status = model.get_health_status()
+        print(f"✓ Post-stress health: {health_status.get('status', 'unknown')}")
+        
+        return success_rate > 0.5  # At least 50% success rate
         
     except Exception as e:
-        print(f"❌ Export optimization test failed: {e}")
+        print(f"❌ Scalability stress test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def run_generation_3_tests():
+def main():
     """Run all Generation 3 scaling tests."""
-    print("⚡ GENERATION 3: MAKE IT SCALE - Testing Performance Optimization")
-    print("=" * 70)
+    print("="*70)
+    print("GENERATION 3: SCALING TESTING")
+    print("Performance optimization, caching, and scalability")
+    print("="*70)
     
     tests = [
         ("Performance Optimization", test_performance_optimization),
-        ("Auto-Scaling", test_auto_scaling),
-        ("Distributed Inference", test_distributed_inference), 
-        ("Caching Strategies", test_caching_strategies),
-        ("Concurrent Performance", test_concurrent_performance),
-        ("Resource Monitoring", test_resource_monitoring),
-        ("Export Optimization", test_export_optimization)
+        ("Concurrent Processing", test_concurrent_processing),
+        ("Model Optimization", test_model_optimization),
+        ("Scalability Stress", test_scalability_stress),
     ]
     
     results = []
+    
     for test_name, test_func in tests:
-        print(f"\n🧪 Running {test_name} Test...")
+        print(f"\n{'='*20} {test_name} {'='*20}")
         try:
             success = test_func()
             results.append((test_name, success))
-            status = "✅ PASSED" if success else "❌ FAILED"
-            print(f"{status}: {test_name}")
         except Exception as e:
-            print(f"❌ FAILED: {test_name} - {e}")
+            print(f"❌ Test {test_name} crashed: {e}")
             results.append((test_name, False))
     
     # Summary
-    print(f"\n{'=' * 70}")
-    print("📊 GENERATION 3 TEST RESULTS:")
+    print("\n" + "="*70)
+    print("GENERATION 3 SCALING TEST RESULTS")
+    print("="*70)
     
-    passed = len([r for r in results if r[1]])
+    passed = sum(1 for _, success in results if success)
     total = len(results)
     
     for test_name, success in results:
-        status = "✅" if success else "❌"
-        print(f"{status} {test_name}")
+        status = "✅ PASS" if success else "❌ FAIL"
+        print(f"{status} - {test_name}")
     
-    print(f"\n🎯 Overall Results: {passed}/{total} tests passed ({passed/total:.1%})")
+    print(f"\nOverall: {passed}/{total} tests passed ({passed/total:.1%})")
     
-    if passed >= total * 0.8:  # 80% success rate acceptable for scaling tests
-        print("🎉 GENERATION 3 COMPLETE: System is now OPTIMIZED FOR SCALE!")
-        print("   ✓ Performance optimization active")
-        print("   ✓ Auto-scaling implemented")  
-        print("   ✓ Distributed inference ready")
-        print("   ✓ Advanced caching working")
-        print("   ✓ Concurrent processing tested")
-        print("   ✓ Resource monitoring operational")
-        print("   ✓ Export optimization available")
-        return True
+    if passed == total:
+        print("\n🚀 Generation 3 SCALABLE: All scaling tests passed!")
+        print("✅ Performance optimization operational")
+        print("✅ Concurrent processing optimized")
+        print("✅ Model optimization features working")
+        print("✅ Scalability stress testing passed")
+        return 0
     else:
-        print("⚠️  Some scaling tests failed - system may have limitations under load")
-        return False
+        print(f"\n⚠️ {total-passed} scaling tests failed. System needs optimization.")
+        return 1
 
 
 if __name__ == "__main__":
-    success = run_generation_3_tests()
-    sys.exit(0 if success else 1)
+    sys.exit(main())

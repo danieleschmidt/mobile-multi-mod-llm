@@ -28,6 +28,13 @@ from .utils import (
     ModelUtils,
     ConfigManager
 )
+from .resilience import (
+    ResilienceManager,
+    CircuitBreaker,
+    RetryManager,
+    FaultInjector,
+    ResourceMonitor
+)
 
 __version__ = "0.1.0"
 __author__ = "Daniel Schmidt"
@@ -60,7 +67,14 @@ __all__ = [
     "TextTokenizer",
     "BenchmarkUtils",
     "ModelUtils",
-    "ConfigManager"
+    "ConfigManager",
+    
+    # Resilience
+    "ResilienceManager",
+    "CircuitBreaker",
+    "RetryManager",
+    "FaultInjector",
+    "ResourceMonitor"
 ]
 
 # Package metadata

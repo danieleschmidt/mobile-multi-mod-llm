@@ -98,6 +98,604 @@ class CircuitBreaker:
     
     def _record_success(self):
         """Record successful execution."""
+        self.success_count += 1
+        
+        if self.state == "HALF_OPEN":
+            # Successful call in half-open state - close the circuit
+            self.state = "CLOSED"
+            self.failure_count = 0
+            logger.info("Circuit breaker CLOSED after successful half-open operation")
+        elif self.state == "CLOSED":
+            # Successful call in closed state - maintain state
+            pass
+    
+    def _record_failure(self, exception: Exception):
+        """Record failed execution."""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        
+        # Add to failure history
+        failure_info = {
+            "timestamp": time.time(),
+            "exception": str(exception),
+            "exception_type": type(exception).__name__
+        }
+        self.failure_history.append(failure_info)
+        
+        # Keep only recent failures (last 100)
+        if len(self.failure_history) > 100:
+            self.failure_history.pop(0)
+        
+        # Update adaptive threshold based on failure patterns
+        if self.adaptive_threshold:
+            self._update_adaptive_threshold()
+        
+        # Check if we should open the circuit
+        if self.failure_count >= self.failure_threshold:
+            if self.state != "OPEN":
+                self.state = "OPEN"
+                logger.error(f"Circuit breaker OPENED after {self.failure_count} failures")
+    
+    def _update_adaptive_threshold(self):
+        """Update failure threshold based on failure patterns."""
+        if len(self.failure_history) < 10:
+            return
+        
+        recent_failures = self.failure_history[-10:]
+        time_span = recent_failures[-1]["timestamp"] - recent_failures[0]["timestamp"]
+        
+        if time_span < 60:  # Failures within 1 minute - be more sensitive
+            self.failure_threshold = max(3, self.failure_threshold - 1)
+        elif time_span > 300:  # Failures spread over 5+ minutes - be less sensitive
+            self.failure_threshold = min(10, self.failure_threshold + 1)
+        
+        logger.debug(f"Adaptive threshold updated to {self.failure_threshold}")
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current circuit breaker status."""
+        return {
+            "state": self.state,
+            "failure_count": self.failure_count,
+            "success_count": self.success_count,
+            "total_requests": self.total_requests,
+            "failure_threshold": self.failure_threshold,
+            "last_failure_time": self.last_failure_time,
+            "success_rate": self.success_count / max(self.total_requests, 1),
+            "recent_failures": len([f for f in self.failure_history if time.time() - f["timestamp"] < 300])
+        }
+    
+    def reset(self):
+        """Manually reset circuit breaker."""
+        self.state = "CLOSED"
+        self.failure_count = 0
+        self.success_count = 0
+        self.last_failure_time = None
+        logger.info("Circuit breaker manually reset")
+
+
+class RetryManager:
+    """Advanced retry mechanism with exponential backoff and jitter."""
+    
+    def __init__(self, max_attempts: int = 3, base_delay: float = 1.0, 
+                 max_delay: float = 60.0, backoff_factor: float = 2.0,
+                 jitter: bool = True):
+        self.max_attempts = max_attempts
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.backoff_factor = backoff_factor
+        self.jitter = jitter
+        
+        # Retry statistics
+        self.attempt_counts = {}
+        self.success_after_retry = 0
+        self.total_retries = 0
+    
+    def retry(self, func: Callable, *args, retryable_exceptions: tuple = (Exception,), **kwargs):
+        """Execute function with retry logic."""
+        last_exception = None
+        func_name = getattr(func, '__name__', 'unknown')
+        
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                result = func(*args, **kwargs)
+                
+                # Record success statistics
+                if attempt > 1:
+                    self.success_after_retry += 1
+                    logger.info(f"Function {func_name} succeeded after {attempt} attempts")
+                
+                return result
+                
+            except retryable_exceptions as e:
+                last_exception = e
+                self.total_retries += 1
+                
+                if attempt < self.max_attempts:
+                    delay = self._calculate_delay(attempt)
+                    logger.warning(f"Attempt {attempt} failed for {func_name}, retrying in {delay:.2f}s: {e}")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"All {self.max_attempts} attempts failed for {func_name}")
+            
+            except Exception as e:
+                # Non-retryable exception
+                logger.error(f"Non-retryable exception in {func_name}: {e}")
+                raise
+        
+        # Update attempt statistics
+        self.attempt_counts[func_name] = self.attempt_counts.get(func_name, 0) + 1
+        
+        # Raise the last exception if all attempts failed
+        raise last_exception
+    
+    def _calculate_delay(self, attempt: int) -> float:
+        """Calculate delay for retry attempt."""
+        delay = min(self.base_delay * (self.backoff_factor ** (attempt - 1)), self.max_delay)
+        
+        if self.jitter:
+            # Add random jitter to prevent thundering herd
+            jitter_amount = delay * 0.1
+            delay += random.uniform(-jitter_amount, jitter_amount)
+        
+        return max(0, delay)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get retry statistics."""
+        return {
+            "total_retries": self.total_retries,
+            "success_after_retry": self.success_after_retry,
+            "success_rate_after_retry": self.success_after_retry / max(self.total_retries, 1),
+            "attempt_counts": self.attempt_counts.copy(),
+            "config": {
+                "max_attempts": self.max_attempts,
+                "base_delay": self.base_delay,
+                "max_delay": self.max_delay,
+                "backoff_factor": self.backoff_factor,
+                "jitter": self.jitter
+            }
+        }
+
+
+class ResourceMonitor:
+    """Advanced resource monitoring and management."""
+    
+    def __init__(self, memory_threshold_mb: float = 1024, 
+                 cpu_threshold_percent: float = 80.0,
+                 monitoring_interval: float = 30.0):
+        self.memory_threshold_mb = memory_threshold_mb
+        self.cpu_threshold_percent = cpu_threshold_percent
+        self.monitoring_interval = monitoring_interval
+        
+        # Resource history
+        self.memory_history = []
+        self.cpu_history = []
+        self.disk_history = []
+        
+        # Alert tracking
+        self.alerts = []
+        self.last_alert_time = {}
+        
+        # Monitoring state
+        self.monitoring = False
+        self.monitor_thread = None
+    
+    def start_monitoring(self):
+        """Start background resource monitoring."""
+        if self.monitoring:
+            logger.warning("Resource monitoring already running")
+            return
+        
+        self.monitoring = True
+        self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self.monitor_thread.start()
+        logger.info("Resource monitoring started")
+    
+    def stop_monitoring(self):
+        """Stop background resource monitoring."""
+        self.monitoring = False
+        if self.monitor_thread:
+            self.monitor_thread.join(timeout=5)
+        logger.info("Resource monitoring stopped")
+    
+    def _monitor_loop(self):
+        """Main monitoring loop."""
+        while self.monitoring:
+            try:
+                self._collect_metrics()
+                self._check_thresholds()
+                time.sleep(self.monitoring_interval)
+            except Exception as e:
+                logger.error(f"Error in resource monitoring loop: {e}")
+                time.sleep(self.monitoring_interval)
+    
+    def _collect_metrics(self):
+        """Collect system resource metrics."""
+        current_time = time.time()
+        
+        try:
+            # Try to use psutil if available
+            import psutil
+            
+            # Memory metrics
+            memory_info = psutil.virtual_memory()
+            memory_mb = memory_info.used / (1024 * 1024)
+            self.memory_history.append({
+                "timestamp": current_time,
+                "value": memory_mb,
+                "percent": memory_info.percent
+            })
+            
+            # CPU metrics
+            cpu_percent = psutil.cpu_percent(interval=1)
+            self.cpu_history.append({
+                "timestamp": current_time,
+                "value": cpu_percent
+            })
+            
+            # Disk metrics
+            disk_info = psutil.disk_usage('/')
+            disk_percent = (disk_info.used / disk_info.total) * 100
+            self.disk_history.append({
+                "timestamp": current_time,
+                "value": disk_percent,
+                "free_gb": disk_info.free / (1024**3)
+            })
+            
+        except ImportError:
+            # Fallback without psutil
+            import os
+            import gc
+            
+            # Memory approximation using garbage collector
+            gc.collect()
+            memory_mb = len(gc.get_objects()) * 0.001  # Very rough estimate
+            self.memory_history.append({
+                "timestamp": current_time,
+                "value": memory_mb,
+                "percent": min(100, memory_mb / self.memory_threshold_mb * 100)
+            })
+            
+            # Load average (Unix only)
+            try:
+                load_avg = os.getloadavg()[0] * 100  # Approximate CPU usage
+                self.cpu_history.append({
+                    "timestamp": current_time,
+                    "value": load_avg
+                })
+            except (AttributeError, OSError):
+                # Windows or other system without load average
+                self.cpu_history.append({
+                    "timestamp": current_time,
+                    "value": 0
+                })
+        
+        # Keep only recent history (last hour)
+        cutoff_time = current_time - 3600
+        self.memory_history = [h for h in self.memory_history if h["timestamp"] > cutoff_time]
+        self.cpu_history = [h for h in self.cpu_history if h["timestamp"] > cutoff_time]
+        self.disk_history = [h for h in self.disk_history if h["timestamp"] > cutoff_time]
+    
+    def _check_thresholds(self):
+        """Check if resource usage exceeds thresholds."""
+        current_time = time.time()
+        
+        # Check memory threshold
+        if self.memory_history:
+            current_memory = self.memory_history[-1]["value"]
+            if current_memory > self.memory_threshold_mb:
+                self._create_alert("memory_threshold_exceeded", {
+                    "current_mb": current_memory,
+                    "threshold_mb": self.memory_threshold_mb,
+                    "percent": self.memory_history[-1].get("percent", 0)
+                })
+        
+        # Check CPU threshold
+        if self.cpu_history:
+            current_cpu = self.cpu_history[-1]["value"]
+            if current_cpu > self.cpu_threshold_percent:
+                self._create_alert("cpu_threshold_exceeded", {
+                    "current_percent": current_cpu,
+                    "threshold_percent": self.cpu_threshold_percent
+                })
+        
+        # Check disk threshold (90% full)
+        if self.disk_history:
+            current_disk = self.disk_history[-1]["value"]
+            if current_disk > 90:
+                self._create_alert("disk_threshold_exceeded", {
+                    "current_percent": current_disk,
+                    "free_gb": self.disk_history[-1].get("free_gb", 0)
+                })
+    
+    def _create_alert(self, alert_type: str, details: Dict[str, Any]):
+        """Create resource alert with rate limiting."""
+        current_time = time.time()
+        
+        # Rate limit alerts (one per 5 minutes per type)
+        if alert_type in self.last_alert_time:
+            if current_time - self.last_alert_time[alert_type] < 300:  # 5 minutes
+                return
+        
+        alert = {
+            "timestamp": current_time,
+            "type": alert_type,
+            "details": details
+        }
+        
+        self.alerts.append(alert)
+        self.last_alert_time[alert_type] = current_time
+        
+        # Keep only recent alerts (last 24 hours)
+        cutoff_time = current_time - 86400
+        self.alerts = [a for a in self.alerts if a["timestamp"] > cutoff_time]
+        
+        logger.warning(f"Resource alert: {alert_type} - {details}")
+    
+    def get_current_metrics(self) -> Dict[str, Any]:
+        """Get current resource metrics."""
+        current_metrics = {"timestamp": time.time()}
+        
+        if self.memory_history:
+            current_metrics["memory"] = self.memory_history[-1]
+        
+        if self.cpu_history:
+            current_metrics["cpu"] = self.cpu_history[-1]
+        
+        if self.disk_history:
+            current_metrics["disk"] = self.disk_history[-1]
+        
+        return current_metrics
+    
+    def get_resource_summary(self) -> Dict[str, Any]:
+        """Get comprehensive resource summary."""
+        summary = {
+            "monitoring_active": self.monitoring,
+            "total_alerts": len(self.alerts),
+            "recent_alerts": len([a for a in self.alerts if time.time() - a["timestamp"] < 3600])
+        }
+        
+        # Memory summary
+        if self.memory_history:
+            memory_values = [h["value"] for h in self.memory_history]
+            summary["memory"] = {
+                "current_mb": memory_values[-1],
+                "avg_mb": sum(memory_values) / len(memory_values),
+                "max_mb": max(memory_values),
+                "threshold_mb": self.memory_threshold_mb,
+                "threshold_exceeded": memory_values[-1] > self.memory_threshold_mb
+            }
+        
+        # CPU summary
+        if self.cpu_history:
+            cpu_values = [h["value"] for h in self.cpu_history]
+            summary["cpu"] = {
+                "current_percent": cpu_values[-1],
+                "avg_percent": sum(cpu_values) / len(cpu_values),
+                "max_percent": max(cpu_values),
+                "threshold_percent": self.cpu_threshold_percent,
+                "threshold_exceeded": cpu_values[-1] > self.cpu_threshold_percent
+            }
+        
+        # Disk summary
+        if self.disk_history:
+            disk_values = [h["value"] for h in self.disk_history]
+            summary["disk"] = {
+                "current_percent": disk_values[-1],
+                "avg_percent": sum(disk_values) / len(disk_values),
+                "max_percent": max(disk_values),
+                "free_gb": self.disk_history[-1].get("free_gb", 0)
+            }
+        
+        return summary
+
+
+class FaultInjector:
+    """Chaos engineering and fault injection for resilience testing."""
+    
+    def __init__(self):
+        self.active_failures = {}
+        self.failure_scenarios = []
+        self.injection_history = []
+    
+    def register_failure_scenario(self, scenario: FailureScenario):
+        """Register a failure scenario for injection."""
+        self.failure_scenarios.append(scenario)
+        logger.info(f"Registered failure scenario: {scenario.failure_type.value}")
+    
+    def inject_failure(self, failure_type: FailureType, duration: float = 10.0) -> str:
+        """Inject a specific failure type."""
+        injection_id = f"{failure_type.value}_{int(time.time())}"
+        
+        failure_info = {
+            "id": injection_id,
+            "type": failure_type,
+            "start_time": time.time(),
+            "duration": duration,
+            "active": True
+        }
+        
+        self.active_failures[injection_id] = failure_info
+        
+        # Schedule failure removal
+        timer = threading.Timer(duration, self._remove_failure, args=[injection_id])
+        timer.start()
+        
+        logger.warning(f"Injected failure: {failure_type.value} for {duration}s (ID: {injection_id})")
+        return injection_id
+    
+    def _remove_failure(self, injection_id: str):
+        """Remove active failure injection."""
+        if injection_id in self.active_failures:
+            failure_info = self.active_failures[injection_id]
+            failure_info["active"] = False
+            failure_info["end_time"] = time.time()
+            
+            # Move to history
+            self.injection_history.append(failure_info)
+            del self.active_failures[injection_id]
+            
+            logger.info(f"Removed failure injection: {injection_id}")
+    
+    def is_failure_active(self, failure_type: FailureType) -> bool:
+        """Check if a specific failure type is currently active."""
+        return any(
+            f["type"] == failure_type and f["active"]
+            for f in self.active_failures.values()
+        )
+    
+    def get_active_failures(self) -> List[Dict[str, Any]]:
+        """Get list of currently active failures."""
+        return [
+            {
+                "id": f["id"],
+                "type": f["type"].value,
+                "duration_remaining": f["start_time"] + f["duration"] - time.time(),
+                "elapsed": time.time() - f["start_time"]
+            }
+            for f in self.active_failures.values()
+        ]
+    
+    def simulate_random_failure(self) -> Optional[str]:
+        """Simulate a random failure from registered scenarios."""
+        if not self.failure_scenarios:
+            return None
+        
+        # Select scenario based on probability
+        for scenario in self.failure_scenarios:
+            if random.random() < scenario.probability:
+                return self.inject_failure(scenario.failure_type, scenario.duration_seconds)
+        
+        return None
+    
+    def clear_all_failures(self):
+        """Clear all active failures."""
+        for injection_id in list(self.active_failures.keys()):
+            self._remove_failure(injection_id)
+        
+        logger.info("All failure injections cleared")
+
+
+class ResilienceManager:
+    """Comprehensive resilience management coordinating all resilience components."""
+    
+    def __init__(self):
+        self.circuit_breaker = CircuitBreaker()
+        self.retry_manager = RetryManager()
+        self.resource_monitor = ResourceMonitor()
+        self.fault_injector = FaultInjector()
+        
+        # Resilience metrics
+        self.resilience_score = 1.0
+        self.last_evaluation = time.time()
+        
+        logger.info("Resilience manager initialized")
+    
+    def execute_with_resilience(self, func: Callable, *args, **kwargs):
+        """Execute function with full resilience protection."""
+        # Check for active fault injections
+        if self.fault_injector.get_active_failures():
+            failure_types = [f["type"] for f in self.fault_injector.get_active_failures()]
+            logger.warning(f"Executing with active fault injections: {failure_types}")
+        
+        # Use circuit breaker and retry manager
+        def resilient_execution():
+            return self.circuit_breaker.call(func, *args, **kwargs)
+        
+        return self.retry_manager.retry(resilient_execution, retryable_exceptions=(Exception,))
+    
+    def start_monitoring(self):
+        """Start all monitoring systems."""
+        self.resource_monitor.start_monitoring()
+        logger.info("Resilience monitoring started")
+    
+    def stop_monitoring(self):
+        """Stop all monitoring systems."""
+        self.resource_monitor.stop_monitoring()
+        logger.info("Resilience monitoring stopped")
+    
+    def evaluate_resilience(self) -> Dict[str, Any]:
+        """Evaluate overall system resilience."""
+        cb_status = self.circuit_breaker.get_status()
+        retry_stats = self.retry_manager.get_stats()
+        resource_summary = self.resource_monitor.get_resource_summary()
+        active_failures = self.fault_injector.get_active_failures()
+        
+        # Calculate resilience score
+        score = 1.0
+        
+        # Circuit breaker impact
+        if cb_status["state"] == "OPEN":
+            score *= 0.3
+        elif cb_status["state"] == "HALF_OPEN":
+            score *= 0.7
+        
+        # Success rate impact
+        success_rate = cb_status["success_rate"]
+        score *= success_rate
+        
+        # Resource pressure impact
+        if resource_summary.get("memory", {}).get("threshold_exceeded", False):
+            score *= 0.8
+        if resource_summary.get("cpu", {}).get("threshold_exceeded", False):
+            score *= 0.8
+        
+        # Active failures impact
+        if active_failures:
+            score *= 0.5
+        
+        self.resilience_score = score
+        self.last_evaluation = time.time()
+        
+        return {
+            "resilience_score": score,
+            "evaluation_time": time.time(),
+            "circuit_breaker": cb_status,
+            "retry_stats": retry_stats,
+            "resource_summary": resource_summary,
+            "active_failures": active_failures,
+            "recommendations": self._generate_recommendations(score, cb_status, resource_summary)
+        }
+    
+    def _generate_recommendations(self, score: float, cb_status: Dict, resource_summary: Dict) -> List[str]:
+        """Generate resilience improvement recommendations."""
+        recommendations = []
+        
+        if score < 0.5:
+            recommendations.append("System resilience critically low - immediate attention required")
+        elif score < 0.7:
+            recommendations.append("System resilience degraded - consider scaling or optimization")
+        
+        if cb_status["state"] == "OPEN":
+            recommendations.append("Circuit breaker open - investigate underlying service issues")
+        
+        if cb_status["success_rate"] < 0.8:
+            recommendations.append("Low success rate - review error handling and service dependencies")
+        
+        if resource_summary.get("memory", {}).get("threshold_exceeded", False):
+            recommendations.append("Memory usage high - consider memory optimization or scaling")
+        
+        if resource_summary.get("cpu", {}).get("threshold_exceeded", False):
+            recommendations.append("CPU usage high - consider load balancing or scaling")
+        
+        if not recommendations:
+            recommendations.append("System resilience is healthy")
+        
+        return recommendations
+    
+    def get_comprehensive_status(self) -> Dict[str, Any]:
+        """Get comprehensive resilience status."""
+        return {
+            "resilience_score": self.resilience_score,
+            "last_evaluation": self.last_evaluation,
+            "circuit_breaker": self.circuit_breaker.get_status(),
+            "retry_manager": self.retry_manager.get_stats(),
+            "resource_monitor": self.resource_monitor.get_resource_summary(),
+            "fault_injector": {
+                "active_failures": self.fault_injector.get_active_failures(),
+                "registered_scenarios": len(self.fault_injector.failure_scenarios)
+            },
+            "monitoring_active": self.resource_monitor.monitoring
+        }
         if self.state == "HALF_OPEN":
             self.success_count += 1
             if self.success_count >= 3:  # Require multiple successes to close

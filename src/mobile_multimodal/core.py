@@ -973,12 +973,12 @@ class MobileMultiModalLLM:
         """Initialize security validation system."""
         try:
             try:
-                from .security import SecurityValidator
+                from .security_fixed import SecurityValidator
             except ImportError:
                 import sys
                 import os
                 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-                from security import SecurityValidator
+                from security_fixed import SecurityValidator
             
             self._security_validator = SecurityValidator(strict_mode=self.strict_security)
             logger.info("Security validation system initialized")

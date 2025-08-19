@@ -1,0 +1,14 @@
+{
+  "export_info": {
+    "model_name": "mobile_multimodal_android",
+    "export_format": "onnx",
+    "quantization_level": "int8",
+    "optimization_profile": "mobile_phone",
+    "target_platform": "android",
+    "export_timestamp": 1755643157.9462605,
+    "model_size_mb": 0.00041103363037109375
+  },
+  "deployment_info": {
+    "platform_config": {
+      "preferred_formats": [
+        

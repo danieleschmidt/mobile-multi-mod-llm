@@ -600,13 +600,8 @@ class SecurityMonitor:
         }
 
 
-# Thread import for the RateLimiter
+# Thread import for the RateLimiter  
 import threading
-                    security_logger.warning(f"Image security check failed: {image_security.get('reason', 'unknown')}")
-                    return validation_result
-                
-                if image_security.get("warnings"):
-                    validation_result["warnings"].extend(image_security["warnings"])
             
             # Text content validation
             if any(key in request_data for key in ["question", "text", "caption"]):

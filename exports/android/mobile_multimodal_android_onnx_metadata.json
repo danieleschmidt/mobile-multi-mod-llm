@@ -1,0 +1,8 @@
+{
+  "opset_version": 18,
+  "producer_name": "mobile_multimodal",
+  "quantization_info": {
+    "level": "int8",
+    "calibration_dataset": "synthetic"
+  }
+}

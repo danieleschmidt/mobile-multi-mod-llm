@@ -1,0 +1,14 @@
+{
+  "export_info": {
+    "model_name": "mobile_multimodal_embedded",
+    "export_format": "tflite",
+    "quantization_level": "int2",
+    "optimization_profile": "embedded",
+    "target_platform": "embedded",
+    "export_timestamp": 1755643157.9484391,
+    "model_size_mb": 0.0013494491577148438
+  },
+  "deployment_info": {
+    "platform_config": {
+      "preferred_formats": [
+        

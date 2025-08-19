@@ -1,0 +1,237 @@
+[
+  {
+    "job_id": "batch",
+    "item_id": "item_0_caption",
+    "operation": "caption",
+    "result": {
+      "caption": "Mock batch caption: A detailed scene"
+    },
+    "processing_time_ms": 51.461219787597656,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.7948623
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_0_ocr",
+    "operation": "ocr",
+    "result": {
+      "text_regions": [
+        {
+          "text": "BATCH OCR",
+          "bbox": [
+            5,
+            5,
+            80,
+            25
+          ],
+          "confidence": 0.95
+        }
+      ]
+    },
+    "processing_time_ms": 31.41951560974121,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.7755103
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_0_vqa",
+    "operation": "vqa",
+    "result": {
+      "answer": "Batch answer: What is in image 0?..."
+    },
+    "processing_time_ms": 40.75288772583008,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.8167944
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_1_caption",
+    "operation": "caption",
+    "result": {
+      "caption": "Mock batch caption: A detailed scene"
+    },
+    "processing_time_ms": 50.582170486450195,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.8458264
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_1_ocr",
+    "operation": "ocr",
+    "result": {
+      "text_regions": [
+        {
+          "text": "BATCH OCR",
+          "bbox": [
+            5,
+            5,
+            80,
+            25
+          ],
+          "confidence": 0.95
+        }
+      ]
+    },
+    "processing_time_ms": 30.878305435180664,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.8884757
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_1_vqa",
+    "operation": "vqa",
+    "result": {
+      "answer": "Batch answer: What is in image 1?..."
+    },
+    "processing_time_ms": 40.77911376953125,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.8987954
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_2_caption",
+    "operation": "caption",
+    "result": {
+      "caption": "Mock batch caption: A detailed scene"
+    },
+    "processing_time_ms": 50.71902275085449,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.939679
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_2_ocr",
+    "operation": "ocr",
+    "result": {
+      "text_regions": [
+        {
+          "text": "BATCH OCR",
+          "bbox": [
+            5,
+            5,
+            80,
+            25
+          ],
+          "confidence": 0.95
+        }
+      ]
+    },
+    "processing_time_ms": 30.966997146606445,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.930087
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_2_vqa",
+    "operation": "vqa",
+    "result": {
+      "answer": "Batch answer: What is in image 2?..."
+    },
+    "processing_time_ms": 40.933847427368164,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643019.992911
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_3_caption",
+    "operation": "caption",
+    "result": {
+      "caption": "Mock batch caption: A detailed scene"
+    },
+    "processing_time_ms": 50.94790458679199,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643020.0033398
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_3_ocr",
+    "operation": "ocr",
+    "result": {
+      "text_regions": [
+        {
+          "text": "BATCH OCR",
+          "bbox": [
+            5,
+            5,
+            80,
+            25
+          ],
+          "confidence": 0.95
+        }
+      ]
+    },
+    "processing_time_ms": 30.849933624267578,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643020.0242083
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_3_vqa",
+    "operation": "vqa",
+    "result": {
+      "answer": "Batch answer: What is in image 3?..."
+    },
+    "processing_time_ms": 40.740251541137695,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643020.044553
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_4_caption",
+    "operation": "caption",
+    "result": {
+      "caption": "Mock batch caption: A detailed scene"
+    },
+    "processing_time_ms": 51.24068260192871,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643020.1082506
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_4_ocr",
+    "operation": "ocr",
+    "result": {
+      "text_regions": [
+        {
+          "text": "BATCH OCR",
+          "bbox": [
+            5,
+            5,
+            80,
+            25
+          ],
+          "confidence": 0.95
+        }
+      ]
+    },
+    "processing_time_ms": 31.172752380371094,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643020.0887713
+  },
+  {
+    "job_id": "batch",
+    "item_id": "item_4_vqa",
+    "operation": "vqa",
+    "result": {
+      "answer": "Batch answer: What is in image 4?..."
+    },
+    "processing_time_ms": 41.080474853515625,
+    "success": true,
+    "error_message": null,
+    "timestamp": 1755643020.1304421
+  }
+]

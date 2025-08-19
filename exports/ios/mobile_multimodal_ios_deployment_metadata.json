@@ -1,0 +1,14 @@
+{
+  "export_info": {
+    "model_name": "mobile_multimodal_ios",
+    "export_format": "coreml",
+    "quantization_level": "fp16",
+    "optimization_profile": "mobile_phone",
+    "target_platform": "ios",
+    "export_timestamp": 1755643157.9473233,
+    "model_size_mb": 0.00390625
+  },
+  "deployment_info": {
+    "platform_config": {
+      "preferred_formats": [
+        

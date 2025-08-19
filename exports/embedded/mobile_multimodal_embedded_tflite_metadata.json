@@ -1,0 +1,31 @@
+{
+  "version": "2.15.0",
+  "quantization": "int2",
+  "delegate_support": [
+    "hexagon",
+    "gpu",
+    "nnapi"
+  ],
+  "input_details": [
+    {
+      "name": "input",
+      "shape": [
+        1,
+        224,
+        224,
+        3
+      ],
+      "dtype": "uint8"
+    }
+  ],
+  "output_details": [
+    {
+      "name": "output",
+      "shape": [
+        1,
+        1000
+      ],
+      "dtype": "uint8"
+    }
+  ]
+}

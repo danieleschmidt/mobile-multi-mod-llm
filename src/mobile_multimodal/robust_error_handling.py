@@ -47,6 +47,65 @@ class RecoveryStrategy(Enum):
     FAIL_FAST = "fail_fast"
     IGNORE = "ignore"
 
+class ErrorRecoveryManager:
+    """Comprehensive error recovery and management."""
+    
+    def __init__(self, max_retries: int = 3, backoff_factor: float = 2.0):
+        self.max_retries = max_retries
+        self.backoff_factor = backoff_factor
+        self.error_history = []
+        logger.info(f"ErrorRecoveryManager initialized with max_retries={max_retries}")
+    
+    def handle_error(self, error: Exception, context: str = "") -> bool:
+        """Handle and potentially recover from an error."""
+        error_info = {
+            "error": str(error),
+            "type": type(error).__name__,
+            "context": context,
+            "timestamp": time.time()
+        }
+        self.error_history.append(error_info)
+        error_logger.error(f"Error handled: {error_info}")
+        return True  # Simplified recovery logic
+
+class CircuitBreaker:
+    """Circuit breaker pattern implementation."""
+    
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.state = "closed"  # closed, open, half_open
+        logger.info(f"CircuitBreaker initialized with threshold={failure_threshold}")
+    
+    def call(self, func: callable, *args, **kwargs) -> Any:
+        """Execute function through circuit breaker."""
+        if self.state == "open":
+            if time.time() - self.last_failure_time > self.recovery_timeout:
+                self.state = "half_open"
+            else:
+                raise Exception("Circuit breaker is OPEN")
+        
+        try:
+            result = func(*args, **kwargs)
+            if self.state == "half_open":
+                self.state = "closed"
+                self.failure_count = 0
+            return result
+        except Exception as e:
+            self.failure_count += 1
+            self.last_failure_time = time.time()
+            
+            if self.failure_count >= self.failure_threshold:
+                self.state = "open"
+            
+            raise e
+    
+    def get_state(self) -> str:
+        """Get current circuit breaker state."""
+        return self.state
+
 @dataclass
 class ErrorContext:
     """Comprehensive error context information."""

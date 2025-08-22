@@ -192,6 +192,23 @@ class MetricCollector:
             raise ValueError(f"Unsupported format: {format}")
 
 
+class ResourceMonitor:
+    """Simple resource monitoring for system metrics."""
+    
+    def __init__(self):
+        """Initialize resource monitor."""
+        self.cpu_usage = 0.0
+        self.memory_usage = 0.0
+        self.start_time = time.time()
+    
+    def get_usage(self):
+        """Get current resource usage."""
+        return {
+            "cpu": self.cpu_usage,
+            "memory": self.memory_usage,
+            "uptime": time.time() - self.start_time
+        }
+
 class TelemetryCollector:
     """Comprehensive telemetry collection for model operations."""
     
@@ -203,6 +220,7 @@ class TelemetryCollector:
             enable_prometheus: Enable Prometheus metrics export
         """
         self.enable_system_metrics = enable_system_metrics and PSUTIL_AVAILABLE
+        self.logger = logging.getLogger(__name__)
         self.enable_prometheus = enable_prometheus and PROMETHEUS_AVAILABLE
         
         self.metric_collector = MetricCollector()

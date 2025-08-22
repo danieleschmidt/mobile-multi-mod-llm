@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -650,6 +650,69 @@ class L2DiskCache(AdaptiveCacheLayer):
                 logger.error(f"L2 cache eviction error: {str(e)}")
                 break
 
+
+class IntelligentCache:
+    """Simplified intelligent cache for Generation 3."""
+    
+    def __init__(self, max_size: int = 10000, default_ttl: int = 3600):
+        self.max_size = max_size
+        self.default_ttl = default_ttl
+        self.cache = {}
+        self.access_times = {}
+        self.hit_count = 0
+        self.miss_count = 0
+        logger.info(f"IntelligentCache initialized with max_size={max_size}")
+    
+    def set(self, key: str, value: Any, ttl: Optional[int] = None, tags: Optional[Dict[str, str]] = None) -> None:
+        """Set value in cache with optional TTL."""
+        if ttl is None:
+            ttl = self.default_ttl
+        
+        # Simple eviction if at capacity
+        if len(self.cache) >= self.max_size:
+            # Remove oldest entry
+            oldest_key = min(self.access_times.keys(), key=self.access_times.get)
+            del self.cache[oldest_key]
+            del self.access_times[oldest_key]
+        
+        self.cache[key] = {
+            "value": value,
+            "expires_at": time.time() + ttl,
+            "tags": tags or {}
+        }
+        self.access_times[key] = time.time()
+    
+    def get(self, key: str) -> Optional[Any]:
+        """Get value from cache."""
+        if key not in self.cache:
+            self.miss_count += 1
+            return None
+        
+        entry = self.cache[key]
+        
+        # Check expiration
+        if time.time() > entry["expires_at"]:
+            del self.cache[key]
+            del self.access_times[key]
+            self.miss_count += 1
+            return None
+        
+        self.access_times[key] = time.time()
+        self.hit_count += 1
+        return entry["value"]
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        total_requests = self.hit_count + self.miss_count
+        hit_ratio = self.hit_count / total_requests if total_requests > 0 else 0.0
+        
+        return {
+            "hit_count": self.hit_count,
+            "miss_count": self.miss_count,
+            "hit_ratio": hit_ratio,
+            "cache_size": len(self.cache),
+            "max_size": self.max_size
+        }
 
 class IntelligentCacheManager:
     """Main cache manager with multi-tier hierarchy and ML optimization."""

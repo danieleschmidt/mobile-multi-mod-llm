@@ -22,6 +22,47 @@ except ImportError:
 logger = logging.getLogger(__name__)
 pipeline_logger = logging.getLogger(f"{__name__}.pipeline")
 
+class RealtimePipeline:
+    """Simple realtime processing pipeline for Generation 3."""
+    
+    def __init__(self, max_latency_ms: int = 100):
+        self.max_latency_ms = max_latency_ms
+        self.pipeline_stages = []
+        self.total_processed = 0
+        self.average_latency = 0.0
+        logger.info(f"RealtimePipeline initialized with max_latency={max_latency_ms}ms")
+    
+    def add_stage(self, stage_func: callable, stage_name: str = "unnamed") -> None:
+        """Add a processing stage to the pipeline."""
+        self.pipeline_stages.append({
+            "func": stage_func,
+            "name": stage_name
+        })
+    
+    def process(self, data: Any) -> Any:
+        """Process data through the pipeline."""
+        start_time = time.time()
+        
+        current_data = data
+        for stage in self.pipeline_stages:
+            try:
+                current_data = stage["func"](current_data)
+            except Exception as e:
+                logger.error(f"Pipeline stage {stage['name']} failed: {e}")
+                raise
+        
+        end_time = time.time()
+        latency_ms = (end_time - start_time) * 1000
+        
+        # Update statistics
+        self.total_processed += 1
+        self.average_latency = (
+            (self.average_latency * (self.total_processed - 1) + latency_ms) / 
+            self.total_processed
+        )
+        
+        return current_data
+
 @dataclass
 class InferenceRequest:
     """Real-time inference request structure."""

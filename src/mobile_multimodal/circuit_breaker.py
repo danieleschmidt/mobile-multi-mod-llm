@@ -22,6 +22,41 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+class CircuitBreaker:
+    """Simple circuit breaker implementation for Generation 2."""
+    
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.state = "closed"  # closed, open, half_open
+        logger = logging.getLogger(__name__)
+        logger.info(f"CircuitBreaker initialized with threshold={failure_threshold}")
+    
+    def call(self, func: callable, *args, **kwargs) -> Any:
+        """Execute function through circuit breaker."""
+        if self.state == "open":
+            if self.last_failure_time and time.time() - self.last_failure_time > self.recovery_timeout:
+                self.state = "half_open"
+            else:
+                raise Exception("Circuit breaker is OPEN")
+        
+        try:
+            result = func(*args, **kwargs)
+            if self.state == "half_open":
+                self.state = "closed"
+                self.failure_count = 0
+            return result
+        except Exception as e:
+            self.failure_count += 1
+            self.last_failure_time = time.time()
+            
+            if self.failure_count >= self.failure_threshold:
+                self.state = "open"
+            
+            raise e
+
 class CircuitState(Enum):
     """Circuit breaker states."""
     CLOSED = "closed"        # Normal operation

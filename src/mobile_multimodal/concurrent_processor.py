@@ -259,6 +259,70 @@ class DeviceCapabilityDetector:
         return best_device
 
 
+class ConcurrentProcessor:
+    """Simple concurrent processing system for Generation 2."""
+    
+    def __init__(self, max_workers: int = 4, queue_size: int = 100):
+        self.max_workers = max_workers
+        self.queue_size = queue_size
+        self.active_workers = 0
+        self._lock = threading.Lock()
+        logger.info(f"ConcurrentProcessor initialized with {max_workers} workers")
+    
+    def process_concurrent(self, tasks: List[Any], processor_func: callable) -> List[Any]:
+        """Process tasks concurrently."""
+        import concurrent.futures
+        
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            try:
+                futures = [executor.submit(processor_func, task) for task in tasks]
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        result = future.result(timeout=30)
+                        results.append(result)
+                    except Exception as e:
+                        logger.error(f"Task processing failed: {e}")
+                        results.append(None)
+            except Exception as e:
+                logger.error(f"Concurrent processing failed: {e}")
+        
+        return results
+
+class ThreadSafeCache:
+    """Thread-safe cache implementation."""
+    
+    def __init__(self, max_size: int = 1000):
+        self.max_size = max_size
+        self.cache = {}
+        self._lock = threading.Lock()
+        logger.info(f"ThreadSafeCache initialized with max_size={max_size}")
+    
+    def get(self, key: str) -> Any:
+        """Get value from cache."""
+        with self._lock:
+            return self.cache.get(key)
+    
+    def set(self, key: str, value: Any) -> None:
+        """Set value in cache."""
+        with self._lock:
+            if len(self.cache) >= self.max_size:
+                # Remove oldest entry (simple FIFO)
+                oldest_key = next(iter(self.cache))
+                del self.cache[oldest_key]
+            
+            self.cache[key] = value
+    
+    def clear(self) -> None:
+        """Clear the cache."""
+        with self._lock:
+            self.cache.clear()
+    
+    def size(self) -> int:
+        """Get current cache size."""
+        with self._lock:
+            return len(self.cache)
+
 class AdaptiveBatchProcessor:
     """Adaptive batch processing with dynamic batch size optimization."""
     

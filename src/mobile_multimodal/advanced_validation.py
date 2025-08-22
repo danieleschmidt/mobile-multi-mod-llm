@@ -561,6 +561,53 @@ class IntegrityValidator(BaseValidator):
         }
 
 
+class InputValidator:
+    """Simple input validator for basic validation needs."""
+    
+    def __init__(self, strict_mode: bool = True):
+        self.strict_mode = strict_mode
+        logger.info(f"InputValidator initialized with strict_mode={strict_mode}")
+    
+    def validate(self, data: Any, validation_type: str = "general") -> bool:
+        """Validate input data with basic checks."""
+        try:
+            if data is None:
+                return False
+            
+            # Basic validation logic
+            if isinstance(data, dict):
+                if data.get("type") == "text" and "content" not in data:
+                    return False
+                if data.get("type") == "image" and "shape" not in data:
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Validation error: {e}")
+            return False
+
+class DataValidator:
+    """Data-specific validation for model inputs."""
+    
+    def __init__(self):
+        self.max_image_size = (4096, 4096)
+        self.max_text_length = 10000
+        logger.info("DataValidator initialized")
+    
+    def validate_image_data(self, image_data: Any) -> bool:
+        """Validate image data format and constraints."""
+        try:
+            if hasattr(image_data, 'shape'):
+                shape = image_data.shape
+                return len(shape) == 3 and shape[2] in [1, 3, 4]
+            elif isinstance(image_data, dict) and "shape" in image_data:
+                shape = image_data["shape"]
+                return isinstance(shape, list) and len(shape) == 3
+            return False
+        except Exception:
+            return False
+
 class CompositeValidator:
     """Composite validator that runs multiple validation checks."""
     

@@ -22,6 +22,45 @@ except ImportError:
 logger = logging.getLogger(__name__)
 batch_logger = logging.getLogger(f"{__name__}.batch")
 
+class BatchProcessor:
+    """Simple batch processor for Generation 3."""
+    
+    def __init__(self, batch_size: int = 8, max_latency_ms: int = 100):
+        self.batch_size = batch_size
+        self.max_latency_ms = max_latency_ms
+        self.queue = []
+        self.last_process_time = time.time()
+        logger.info(f"BatchProcessor initialized with batch_size={batch_size}")
+    
+    def add_to_batch(self, item: Any) -> None:
+        """Add item to processing batch."""
+        self.queue.append(item)
+    
+    def process_batch(self, processor_func: callable = None) -> List[Any]:
+        """Process current batch."""
+        if not self.queue:
+            return []
+        
+        batch = self.queue.copy()
+        self.queue.clear()
+        self.last_process_time = time.time()
+        
+        if processor_func:
+            return [processor_func(item) for item in batch]
+        else:
+            return batch  # Just return as-is
+    
+    def should_process(self) -> bool:
+        """Check if batch should be processed."""
+        if len(self.queue) >= self.batch_size:
+            return True
+        
+        time_since_last = (time.time() - self.last_process_time) * 1000
+        if time_since_last >= self.max_latency_ms and len(self.queue) > 0:
+            return True
+        
+        return False
+
 @dataclass
 class BatchItem:
     """Individual item in a batch processing job."""

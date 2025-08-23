@@ -1,0 +1,608 @@
+{
+  "timestamp": 1755969950.0590458,
+  "overall_status": "FAILED",
+  "critical_failures": 1,
+  "total_checks": 6,
+  "passed_checks": 3,
+  "execution_time_seconds": 5.274271011352539,
+  "checks": [
+    {
+      "check": "python_syntax",
+      "success": true,
+      "files_checked": 73,
+      "errors": [],
+      "summary": "Checked 73 Python files, 0 syntax errors"
+    },
+    {
+      "check": "import_security",
+      "success": false,
+      "files_checked": 46,
+      "issues": [
+        {
+          "file": "src/mobile_multimodal/__init__.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/__init__.py",
+          "issue": "Suspicious import/usage: getattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/adaptive_quantization.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/advanced_security.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/advanced_security.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/advanced_testing.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/advanced_validation.py",
+          "issue": "Suspicious import/usage: getattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/auto_scaling.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/auto_scaling.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/batch_processor.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/circuit_breaker.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/concurrent_processor.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/core.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/core.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/distributed_inference.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/edge_federated_learning.py",
+          "issue": "Suspicious import/usage: setattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/enhanced_monitoring.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/export.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/guard_config.py",
+          "issue": "Suspicious import/usage: setattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/guard_logging.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/guard_logging.py",
+          "issue": "Suspicious import/usage: getattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/guard_metrics.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/guard_metrics.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/guard_orchestrator.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/guard_orchestrator.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/guard_orchestrator.py",
+          "issue": "Suspicious import/usage: pickle.load",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/hybrid_attention.py",
+          "issue": "Suspicious import/usage: setattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/intelligent_cache.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/intelligent_cache.py",
+          "issue": "Suspicious import/usage: pickle.load",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/models.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/monitoring.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/optimization.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/optimization.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/pipeline_guard.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/quantization.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/quantization.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/realtime_pipeline.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/resilience.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/resilience.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/resilience.py",
+          "issue": "Suspicious import/usage: getattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/resilience_patterns.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/robust_error_handling.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/robust_error_handling.py",
+          "issue": "Suspicious import/usage: getattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/security.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/security.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/security.py",
+          "issue": "Potentially dangerous pattern: input(",
+          "severity": "MEDIUM"
+        },
+        {
+          "file": "src/mobile_multimodal/security_fixed.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/security_fixed.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/utils.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/utils.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/utils.py",
+          "issue": "Suspicious import/usage: __import__",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/utils.py",
+          "issue": "Potentially dangerous pattern: input(",
+          "severity": "MEDIUM"
+        },
+        {
+          "file": "src/mobile_multimodal/scaling_optimization.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/scaling_optimization.py",
+          "issue": "Suspicious import/usage: setattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/robust_validation.py",
+          "issue": "Potentially dangerous pattern: input(",
+          "severity": "MEDIUM"
+        },
+        {
+          "file": "src/mobile_multimodal/data/cache.py",
+          "issue": "Suspicious import/usage: exec",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/data/cache.py",
+          "issue": "Suspicious import/usage: pickle.load",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/data/dataset.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/data/storage.py",
+          "issue": "Suspicious import/usage: pickle.load",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/scripts/benchmark.py",
+          "issue": "Suspicious import/usage: getattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/scripts/export.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/scripts/export.py",
+          "issue": "Suspicious import/usage: getattr",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/scripts/train.py",
+          "issue": "Suspicious import/usage: eval",
+          "severity": "HIGH"
+        },
+        {
+          "file": "src/mobile_multimodal/scripts/train.py",
+          "issue": "Suspicious import/usage: getattr",
+          "severity": "HIGH"
+        }
+      ],
+      "summary": "Scanned 46 files, 64 security issues found"
+    },
+    {
+      "check": "dependency_security",
+      "success": true,
+      "dependencies_found": [
+        "requirements.txt",
+        "requirements-dev.txt",
+        "pyproject.toml"
+      ],
+      "vulnerabilities": [],
+      "summary": "Checked 3 dependency files, 0 potential issues"
+    },
+    {
+      "check": "secrets_exposure",
+      "success": false,
+      "files_checked": 159,
+      "exposed_secrets": [
+        {
+          "file": "security_compliance_fix.py",
+          "pattern": "api_key=",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        },
+        {
+          "file": "security_compliance_fix.py",
+          "pattern": "secret_key=",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        },
+        {
+          "file": "security_compliance_fix.py",
+          "pattern": "password=",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        },
+        {
+          "file": "security_compliance_fix.py",
+          "pattern": "token=",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        },
+        {
+          "file": "security_compliance_fix.py",
+          "pattern": "AWS_ACCESS_KEY",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        },
+        {
+          "file": "security_compliance_fix.py",
+          "pattern": "SECRET_ACCESS_KEY",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        },
+        {
+          "file": "security_quality_report.json",
+          "pattern": "password=",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        },
+        {
+          "file": "DEPLOYMENT_GUIDE.md",
+          "pattern": "secret_key=",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        },
+        {
+          "file": "DEPLOYMENT_GUIDE.md",
+          "pattern": "password=",
+          "severity": "HIGH",
+          "line": "Multiple lines may contain secrets"
+        }
+      ],
+      "summary": "Scanned 159 files, 9 potential secret exposures"
+    },
+    {
+      "check": "code_quality",
+      "success": true,
+      "files_checked": 46,
+      "issues": [
+        {
+          "file": "src/mobile_multimodal/advanced_testing.py",
+          "line": 619,
+          "issue": "Line too long (123 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/advanced_validation.py",
+          "line": 193,
+          "issue": "Line too long (131 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/core.py",
+          "line": 365,
+          "issue": "Line too long (121 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/core.py",
+          "line": 559,
+          "issue": "Line too long (124 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/distributed_inference.py",
+          "line": 617,
+          "issue": "Line too long (136 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/edge_export.py",
+          "line": 160,
+          "issue": "Line too long (122 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/edge_export.py",
+          "line": 585,
+          "issue": "Line too long (122 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/enhanced_monitoring.py",
+          "line": 31,
+          "issue": "Line too long (125 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/export.py",
+          "line": 511,
+          "issue": "Line too long (130 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/monitoring.py",
+          "line": 129,
+          "issue": "Line too long (126 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/monitoring.py",
+          "line": 243,
+          "issue": "Line too long (144 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/monitoring.py",
+          "line": 245,
+          "issue": "Line too long (139 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/monitoring.py",
+          "line": 281,
+          "issue": "Line too long (123 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/monitoring.py",
+          "line": 334,
+          "issue": "Line too long (122 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/monitoring.py",
+          "line": 342,
+          "issue": "Line too long (134 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/monitoring.py",
+          "line": 633,
+          "issue": "Line too long (132 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/optimization.py",
+          "line": 171,
+          "issue": "Line too long (134 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/optimization.py",
+          "line": 172,
+          "issue": "Line too long (140 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/quantization.py",
+          "line": 224,
+          "issue": "Line too long (121 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/quantization.py",
+          "line": 297,
+          "issue": "Line too long (133 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/resilience.py",
+          "line": 990,
+          "issue": "Line too long (129 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/robust_error_handling.py",
+          "line": 279,
+          "issue": "Line too long (121 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/security.py",
+          "line": 599,
+          "issue": "Line too long (123 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/data/storage.py",
+          "line": 361,
+          "issue": "Line too long (133 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/data/storage.py",
+          "line": 367,
+          "issue": "Line too long (121 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/scripts/benchmark.py",
+          "line": 402,
+          "issue": "Line too long (134 chars)",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/scripts/export.py",
+          "issue": "Functions found without docstrings",
+          "severity": "LOW"
+        },
+        {
+          "file": "src/mobile_multimodal/scripts/train.py",
+          "issue": "Functions found without docstrings",
+          "severity": "LOW"
+        }
+      ],
+      "summary": "Quality check on 46 files, 28 issues found"
+    },
+    {
+      "check": "test_coverage",
+      "success": false,
+      "src_files": 46,
+      "test_files": 20,
+      "src_modules": 42,
+      "tested_modules": 20,
+      "coverage_estimate": 0.47619047619047616,
+      "summary": "Estimated 47.6% test coverage (20 test files for 46 source files)"
+    }
+  ],
+  "recommendations": [
+    "Review and fix all critical security issues immediately",
+    "Address code quality issues to improve maintainability",
+    "Increase test coverage to meet quality standards",
+    "URGENT: Remove all exposed secrets and rotate compromised credentials"
+  ]
+}

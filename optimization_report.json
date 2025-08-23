@@ -1,0 +1,52 @@
+{
+  "timestamp": 1755969736.1356194,
+  "performance_improvements": {
+    "cache_speedup_image": "460x",
+    "cache_speedup_inference": "982x",
+    "concurrency_speedup": "6.4x"
+  },
+  "cache_performance": {
+    "intelligent_cache": {
+      "size": 50,
+      "max_size": 100,
+      "memory_mb": 0.0005626678466796875,
+      "max_memory_mb": 10.0,
+      "hit_count": 25,
+      "miss_count": 0,
+      "hit_rate": 1.0,
+      "eviction_count": 0
+    },
+    "image_preprocessing": {
+      "size": 1,
+      "max_size": 500,
+      "memory_mb": 0.57421875,
+      "max_memory_mb": 512.0,
+      "hit_count": 1,
+      "miss_count": 1,
+      "hit_rate": 0.5,
+      "eviction_count": 0
+    },
+    "model_inference": {
+      "size": 1,
+      "max_size": 1000,
+      "memory_mb": 0.00016307830810546875,
+      "max_memory_mb": 512.0,
+      "hit_count": 1,
+      "miss_count": 1,
+      "hit_rate": 0.5,
+      "eviction_count": 0
+    }
+  },
+  "load_balancing": {
+    "endpoints_configured": 3,
+    "requests_distributed": 100,
+    "distribution": {
+      "server-1": 100
+    }
+  },
+  "auto_scaling": {
+    "current_scale": 4,
+    "scaling_rules": 2,
+    "metrics_history_size": 3
+  }
+}

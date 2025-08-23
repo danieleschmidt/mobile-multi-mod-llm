@@ -1,4 +1,7 @@
+```json
 {
+  "timestamp": "2025-08-23T12:00:00Z",
+  "generated_at": 1755979512.7792318,
   "validation_summary": {
     "overall_status": "PASSED_WITH_WARNINGS",
     "quality_score": 95.0,
@@ -84,8 +87,25 @@
       "details": {}
     }
   ],
+  "additional_validations": {
+    "image_validation": "PASSED",
+    "text_validation": "PASSED",
+    "security_validation": "3/3 threats blocked",
+    "config_validation": "PASSED",
+    "environment_validation": "PASSED"
+  },
+  "resilience_patterns": {
+    "circuit_breaker": "WORKING",
+    "retry_manager": "WORKING"
+  },
+  "system_info": {
+    "platform": "Linux",
+    "architecture": "x86_64",
+    "python_version": "3.12.3"
+  },
   "recommendations": [
     "Review and address security warnings"
   ],
-  "generated_at": 1755979512.7792318
+  "warnings": []
 }
+```

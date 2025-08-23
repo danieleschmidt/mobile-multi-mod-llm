@@ -181,8 +181,8 @@ export PIPELINE_GUARD_DB_PATH=/app/data/pipeline_guard.db
 export PIPELINE_GUARD_LOG_PATH=/app/logs/pipeline_guard.log
 
 # Security
-export REDIS_PASSWORD=your-secure-password
-export JWT_SECRET_KEY=your-jwt-secret
+export REDIS_password=<SECURE_PASSWORD>-secure-password
+export JWT_secret_key=<YOUR_SECRET_KEY>-jwt-secret
 ```
 
 ## 🔍 Monitoring Features

@@ -1,0 +1,593 @@
+# Production Deployment Configuration for Mobile Multi-Modal LLM
+# Advanced production-ready Kubernetes deployment with scaling, monitoring, and security
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mobile-multimodal-llm
+  labels:
+    name: mobile-multimodal-llm
+    environment: production
+    
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mobile-multimodal-config
+  namespace: mobile-multimodal-llm
+data:
+  app_config.yaml: |
+    # Core application settings
+    app:
+      name: "Mobile Multi-Modal LLM"
+      version: "1.0.0"
+      environment: "production"
+      log_level: "INFO"
+      
+    # Model configuration
+    models:
+      base_model_path: "/models/mobile-mm-llm-base"
+      int2_model_path: "/models/mobile-mm-llm-int2"
+      cache_size: 1000
+      max_concurrent_inferences: 10
+      
+    # Security configuration
+    security:
+      enable_auth: true
+      jwt_secret_key: "${JWT_SECRET_KEY}"
+      rate_limit: 100
+      max_request_size: "10MB"
+      
+    # Monitoring configuration
+    monitoring:
+      metrics_port: 8000
+      health_check_path: "/health"
+      enable_tracing: true
+      prometheus_enabled: true
+      
+    # Scaling configuration
+    scaling:
+      min_replicas: 3
+      max_replicas: 50
+      target_cpu_utilization: 70
+      scale_up_threshold: 0.8
+      scale_down_threshold: 0.3
+      
+    # Database configuration
+    redis:
+      host: "redis-cluster"
+      port: 6379
+      db: 0
+      max_connections: 100
+      
+---
+# Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mobile-multimodal-secrets
+  namespace: mobile-multimodal-llm
+type: Opaque
+stringData:
+  jwt-secret: "your-jwt-secret-here"
+  redis-password: "your-redis-password-here"
+  
+---
+# PersistentVolumeClaim for model storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: models-pvc
+  namespace: mobile-multimodal-llm
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd
+  
+---
+# Deployment for the main application
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-multimodal-llm
+  namespace: mobile-multimodal-llm
+  labels:
+    app: mobile-multimodal-llm
+    component: api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
+  selector:
+    matchLabels:
+      app: mobile-multimodal-llm
+      component: api
+  template:
+    metadata:
+      labels:
+        app: mobile-multimodal-llm
+        component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: mobile-multimodal-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: mobile-multimodal-llm
+        image: mobile-multimodal-llm:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8000
+          name: metrics
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mobile-multimodal-secrets
+              key: jwt-secret
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mobile-multimodal-secrets
+              key: redis-password
+        volumeMounts:
+        - name: models-volume
+          mountPath: /models
+          readOnly: true
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp-volume
+          mountPath: /tmp
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: 2000m
+            memory: 8Gi
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
+      volumes:
+      - name: models-volume
+        persistentVolumeClaim:
+          claimName: models-pvc
+      - name: config-volume
+        configMap:
+          name: mobile-multimodal-config
+      - name: tmp-volume
+        emptyDir:
+          sizeLimit: 1Gi
+      nodeSelector:
+        node-type: gpu-enabled
+      tolerations:
+      - key: "gpu"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: mobile-multimodal-llm
+            component: api
+            
+---
+# HorizontalPodAutoscaler for auto-scaling
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mobile-multimodal-hpa
+  namespace: mobile-multimodal-llm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mobile-multimodal-llm
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: inference_queue_length
+      target:
+        type: AverageValue
+        averageValue: "10"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 5
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      selectPolicy: Min
+      
+---
+# Service for the main application
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobile-multimodal-service
+  namespace: mobile-multimodal-llm
+  labels:
+    app: mobile-multimodal-llm
+    component: api
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: metrics
+  selector:
+    app: mobile-multimodal-llm
+    component: api
+  sessionAffinity: None
+  
+---
+# ServiceAccount for the application
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mobile-multimodal-sa
+  namespace: mobile-multimodal-llm
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/MobileMultiModalRole
+    
+---
+# Role for the service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: mobile-multimodal-llm
+  name: mobile-multimodal-role
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+  
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mobile-multimodal-binding
+  namespace: mobile-multimodal-llm
+subjects:
+- kind: ServiceAccount
+  name: mobile-multimodal-sa
+  namespace: mobile-multimodal-llm
+roleRef:
+  kind: Role
+  name: mobile-multimodal-role
+  apiGroup: rbac.authorization.k8s.io
+  
+---
+# NetworkPolicy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mobile-multimodal-netpol
+  namespace: mobile-multimodal-llm
+spec:
+  podSelector:
+    matchLabels:
+      app: mobile-multimodal-llm
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS outbound
+    - protocol: TCP
+      port: 53   # DNS
+    - protocol: UDP
+      port: 53   # DNS
+      
+---
+# PodDisruptionBudget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mobile-multimodal-pdb
+  namespace: mobile-multimodal-llm
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: mobile-multimodal-llm
+      component: api
+      
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mobile-multimodal-ingress
+  namespace: mobile-multimodal-llm
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - api.mobile-mm-llm.com
+    secretName: mobile-multimodal-tls
+  rules:
+  - host: api.mobile-mm-llm.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mobile-multimodal-service
+            port:
+              number: 80
+              
+---
+# Redis Cluster for distributed caching and task queues
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-cluster
+  namespace: mobile-multimodal-llm
+spec:
+  serviceName: redis-cluster
+  replicas: 6
+  selector:
+    matchLabels:
+      app: redis-cluster
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        ports:
+        - containerPort: 6379
+          name: client
+        - containerPort: 16379
+          name: gossip
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /etc/redis
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 2Gi
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+          
+---
+# Redis ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: mobile-multimodal-llm
+data:
+  redis.conf: |
+    cluster-enabled yes
+    cluster-config-file nodes.conf
+    cluster-node-timeout 5000
+    appendonly yes
+    save 900 1
+    save 300 10
+    save 60 10000
+    maxmemory 1gb
+    maxmemory-policy allkeys-lru
+    
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster
+  namespace: mobile-multimodal-llm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: client
+  - port: 16379
+    targetPort: 16379
+    name: gossip
+  selector:
+    app: redis-cluster
+    
+---
+# ServiceMonitor for Prometheus monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mobile-multimodal-metrics
+  namespace: mobile-multimodal-llm
+  labels:
+    app: mobile-multimodal-llm
+spec:
+  selector:
+    matchLabels:
+      app: mobile-multimodal-llm
+      component: api
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    
+---
+# PrometheusRule for alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mobile-multimodal-alerts
+  namespace: mobile-multimodal-llm
+  labels:
+    app: mobile-multimodal-llm
+spec:
+  groups:
+  - name: mobile-multimodal.rules
+    rules:
+    - alert: HighErrorRate
+      expr: rate(mobile_multimodal_errors_total[5m]) > 0.1
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value }} errors per second"
+    
+    - alert: HighLatency
+      expr: histogram_quantile(0.95, rate(mobile_multimodal_request_duration_seconds_bucket[5m])) > 2
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High request latency"
+        description: "95th percentile latency is {{ $value }}s"
+    
+    - alert: PodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total[15m]) * 60 * 15 > 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Pod is crash looping"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently"
+    
+    - alert: HighMemoryUsage
+      expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High memory usage"
+        description: "Memory usage is {{ $value | humanizePercentage }}"

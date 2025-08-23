@@ -1,0 +1,91 @@
+{
+  "validation_summary": {
+    "overall_status": "PASSED_WITH_WARNINGS",
+    "quality_score": 95.0,
+    "total_checks": 10,
+    "execution_time": 2.0,
+    "status_breakdown": {
+      "PASS": 9,
+      "FAIL": 0,
+      "WARN": 1,
+      "SKIP": 0
+    }
+  },
+  "validation_results": [
+    {
+      "check_name": "project_structure_dirs",
+      "status": "PASS",
+      "message": "All required directories present",
+      "details": {}
+    },
+    {
+      "check_name": "project_structure_files",
+      "status": "PASS",
+      "message": "All required files present",
+      "details": {}
+    },
+    {
+      "check_name": "source_organization",
+      "status": "PASS",
+      "message": "Well-organized codebase with 48 Python files",
+      "details": {}
+    },
+    {
+      "check_name": "syntax_validation",
+      "status": "PASS",
+      "message": "All 48 Python files have valid syntax",
+      "details": {}
+    },
+    {
+      "check_name": "import_validation",
+      "status": "PASS",
+      "message": "Import structure validated across 48 files",
+      "details": {}
+    },
+    {
+      "check_name": "security_validation",
+      "status": "WARN",
+      "message": "Security concerns found in 6 cases",
+      "details": {
+        "issues": [
+          "/root/repo/src/mobile_multimodal/export.py - Dangerous eval() usage: 2 occurrences",
+          "/root/repo/src/mobile_multimodal/models.py - Dangerous eval() usage: 1 occurrences",
+          "/root/repo/src/mobile_multimodal/quantization.py - Dangerous eval() usage: 4 occurrences",
+          "/root/repo/src/mobile_multimodal/utils.py - Dangerous exec() usage: 1 occurrences",
+          "/root/repo/src/mobile_multimodal/utils.py - Dangerous eval() usage: 2 occurrences",
+          "/root/repo/src/mobile_multimodal/scripts/export.py - Dangerous eval() usage: 2 occurrences"
+        ]
+      }
+    },
+    {
+      "check_name": "documentation_validation",
+      "status": "PASS",
+      "message": "Good documentation coverage: 80.6% (1181/1465)",
+      "details": {}
+    },
+    {
+      "check_name": "testing_validation",
+      "status": "PASS",
+      "message": "Testing setup found: 12 test files, 197 test functions, 53 test classes",
+      "details": {
+        "execution_result": "Test collection issues detected"
+      }
+    },
+    {
+      "check_name": "performance_validation",
+      "status": "PASS",
+      "message": "Good performance optimization coverage: 58.3%",
+      "details": {}
+    },
+    {
+      "check_name": "deployment_validation",
+      "status": "PASS",
+      "message": "Excellent deployment readiness: Docker, Docker Compose, Kubernetes, Monitoring, Python Package Config",
+      "details": {}
+    }
+  ],
+  "recommendations": [
+    "Review and address security warnings"
+  ],
+  "generated_at": 1755979512.7792318
+}

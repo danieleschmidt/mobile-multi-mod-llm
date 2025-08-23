@@ -292,8 +292,8 @@ export PIPELINE_GUARD_DB_PATH=/app/data/pipeline_guard.db
 export PIPELINE_GUARD_LOG_PATH=/app/logs/pipeline_guard.log
 
 # Security configuration
-export REDIS_PASSWORD=your-secure-password
-export JWT_SECRET_KEY=your-jwt-secret
+export REDIS_password=<SECURE_PASSWORD>-secure-password
+export JWT_secret_key=<YOUR_SECRET_KEY>-jwt-secret
 
 # Monitoring configuration
 export PROMETHEUS_URL=http://prometheus:9090
@@ -355,7 +355,7 @@ kubectl create secret tls pipeline-guard-tls \
 ```bash
 # Kubernetes secrets
 kubectl create secret generic pipeline-guard-secrets \
-  --from-literal=redis-password=your-password \
+  --from-literal=redis-password=<SECURE_PASSWORD>-password \
   --from-literal=jwt-secret=your-jwt-secret \
   -n pipeline-system
 

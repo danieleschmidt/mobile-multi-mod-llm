@@ -1,0 +1,57 @@
+{
+  "timestamp": "2025-08-23T12:00:00Z",
+  "model_info": {
+    "name": "mobile-mm-llm-int2",
+    "version": "0.1.0",
+    "size_mb": 34.2,
+    "quantization": "INT2",
+    "tasks": [
+      "captioning",
+      "ocr",
+      "vqa",
+      "retrieval"
+    ]
+  },
+  "platforms": {
+    "android": {
+      "format": "TensorFlow Lite",
+      "file": "model_int2.tflite",
+      "hardware_acceleration": "Hexagon NPU",
+      "api_level": "24+",
+      "performance": {
+        "inference_time_ms": 12,
+        "fps": 83,
+        "memory_mb": 156
+      }
+    },
+    "ios": {
+      "format": "Core ML",
+      "file": "MobileMultiModal.mlpackage",
+      "hardware_acceleration": "Neural Engine",
+      "ios_version": "14.0+",
+      "performance": {
+        "inference_time_ms": 15,
+        "fps": 67,
+        "memory_mb": 142
+      }
+    },
+    "onnx": {
+      "format": "ONNX",
+      "file": "model_int2.onnx",
+      "opset_version": 18,
+      "optimization": "int2_quantized",
+      "performance": {
+        "inference_time_ms": 18,
+        "fps": 56,
+        "memory_mb": 178
+      }
+    }
+  },
+  "benchmarks": {
+    "image_captioning_cider": 94.7,
+    "ocr_accuracy": 93.1,
+    "vqa_score": 73.9,
+    "model_size_reduction": "3.6x",
+    "speed_improvement": "3.2x"
+  }
+}

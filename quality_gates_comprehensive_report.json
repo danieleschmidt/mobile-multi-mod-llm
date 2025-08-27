@@ -1,0 +1,83 @@
+{
+  "overall_score": 0.9326666666666668,
+  "overall_status": "EXCELLENT",
+  "execution_timestamp": 1756253268.8327644,
+  "summary": {
+    "total_gates": 10,
+    "passed": 9,
+    "warnings": 1,
+    "failed": 0
+  },
+  "gate_results": {
+    "code_quality": {
+      "status": "PASS",
+      "score": 0.9099999999999999,
+      "execution_time": 0.5090980529785156,
+      "error": null
+    },
+    "security_compliance": {
+      "status": "PASS",
+      "score": 0.95,
+      "execution_time": 0.0006625652313232422,
+      "error": null
+    },
+    "performance_benchmarks": {
+      "status": "PASS",
+      "score": 1.0,
+      "execution_time": 0.025928258895874023,
+      "error": null
+    },
+    "test_coverage": {
+      "status": "WARNING",
+      "score": 0.6666666666666666,
+      "execution_time": 0.23101544380187988,
+      "error": null
+    },
+    "documentation": {
+      "status": "PASS",
+      "score": 1.0,
+      "execution_time": 0.0001347064971923828,
+      "error": null
+    },
+    "dependency_security": {
+      "status": "PASS",
+      "score": 1.0,
+      "execution_time": 3.0040740966796875e-05,
+      "error": null
+    },
+    "api_compatibility": {
+      "status": "PASS",
+      "score": 1.0,
+      "execution_time": 1.4781951904296875e-05,
+      "error": null
+    },
+    "mobile_optimization": {
+      "status": "PASS",
+      "score": 1.0,
+      "execution_time": 8.821487426757812e-06,
+      "error": null
+    },
+    "deployment_readiness": {
+      "status": "PASS",
+      "score": 1.0,
+      "execution_time": 5.030632019042969e-05,
+      "error": null
+    },
+    "monitoring_instrumentation": {
+      "status": "PASS",
+      "score": 0.8,
+      "execution_time": 0.007195234298706055,
+      "error": null
+    }
+  },
+  "critical_failures": [],
+  "recommendations": [
+    "Improve test coverage to meet quality standards"
+  ],
+  "deployment_readiness": {
+    "ready_for_production": true,
+    "ready_for_staging": true,
+    "critical_gates_passed": "3/3",
+    "blocking_issues": 0
+  }
+}
